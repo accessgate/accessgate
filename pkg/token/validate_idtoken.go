@@ -2,6 +2,7 @@ package token
 
 import (
 	"context"
+	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rsa"
@@ -162,14 +163,22 @@ func keyFuncFromJWKS(jwksData []byte) jwt.Keyfunc {
 }
 
 func ecPubKeyFromJWK(crv, xB64, yB64 string) (*ecdsa.PublicKey, error) {
-	var curve elliptic.Curve
+	var fieldBytes int
+	var ecdhCurve ecdh.Curve
+	var ellipticCurve elliptic.Curve
 	switch crv {
 	case "P-256":
-		curve = elliptic.P256()
+		fieldBytes = 32
+		ecdhCurve = ecdh.P256()
+		ellipticCurve = elliptic.P256()
 	case "P-384":
-		curve = elliptic.P384()
+		fieldBytes = 48
+		ecdhCurve = ecdh.P384()
+		ellipticCurve = elliptic.P384()
 	case "P-521":
-		curve = elliptic.P521()
+		fieldBytes = 66
+		ecdhCurve = ecdh.P521()
+		ellipticCurve = elliptic.P521()
 	default:
 		return nil, fmt.Errorf("token: unsupported EC curve %s", crv)
 	}
@@ -181,10 +190,26 @@ func ecPubKeyFromJWK(crv, xB64, yB64 string) (*ecdsa.PublicKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	x := new(big.Int).SetBytes(xBytes)
-	y := new(big.Int).SetBytes(yBytes)
-	if !curve.IsOnCurve(x, y) {
-		return nil, fmt.Errorf("token: EC public key point is not on curve %s", crv)
+	if len(xBytes) > fieldBytes || len(yBytes) > fieldBytes {
+		return nil, fmt.Errorf("token: EC coordinate too large for %s", crv)
 	}
-	return &ecdsa.PublicKey{Curve: curve, X: x, Y: y}, nil
+	xP := make([]byte, fieldBytes)
+	yP := make([]byte, fieldBytes)
+	copy(xP[fieldBytes-len(xBytes):], xBytes)
+	copy(yP[fieldBytes-len(yBytes):], yBytes)
+	sec1 := make([]byte, 1+2*fieldBytes)
+	sec1[0] = 4
+	copy(sec1[1:], xP)
+	copy(sec1[1+fieldBytes:], yP)
+	pubECDH, err := ecdhCurve.NewPublicKey(sec1)
+	if err != nil {
+		return nil, fmt.Errorf("token: EC public key point is not on curve %s: %w", crv, err)
+	}
+	raw := pubECDH.Bytes()
+	if len(raw) != len(sec1) || raw[0] != 4 {
+		return nil, fmt.Errorf("token: unexpected EC public key encoding for %s", crv)
+	}
+	x := new(big.Int).SetBytes(raw[1 : 1+fieldBytes])
+	y := new(big.Int).SetBytes(raw[1+fieldBytes:])
+	return &ecdsa.PublicKey{Curve: ellipticCurve, X: x, Y: y}, nil
 }
