@@ -1,0 +1,29 @@
+# accessgate-auth — dev variant (local IdP, relaxed redirects).
+# Use: CONFIG_PATH=configs/auth.dev.yaml or AUTH_CONFIG=configs/auth.dev.yaml
+
+oidc_issuer: "https://idp.example.com"
+oidc_redirect_uri: "http://localhost:8080/callback"
+oidc_client_id: "your-client-id"
+oidc_client_secret: "your-client-secret"
+oidc_scopes: ["openid", "profile"]
+oidc_audience: ""
+oidc_claims_source: "id_token"
+redis_url: "redis://localhost:6379"
+session_redis_prefix: "auth"
+session_ttl_seconds: 36000
+session_pkce_ttl_seconds: 300
+session_refresh_lock_ttl_seconds: 15
+session_refresh_early_seconds: 60
+cookie_name: "__Host-ess_session"
+cookie_signing_secret: "dev-secret-change-in-prod"
+cookie_secure: false
+cookie_same_site: "lax"
+cookie_domain: ""
+app_base_url: "http://localhost:8080"
+login_error_redirect_path: "/login?error=oidc_error"
+allowed_redirect_origins: ["http://localhost:3000", "http://localhost:8080"]
+allowed_redirect_paths: ["/", "/dashboard"]
+http_port: "8080"
+post_login_webhook_url: ""
+session_enrichment_api: ""
+cors_allowed_origins: ["http://localhost:3000"]

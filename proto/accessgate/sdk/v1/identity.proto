@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package accessgate.sdk.v1;
+
+option go_package = "github.com/ArmanAvanesyan/accessgate/proto/gen/go/accessgate/sdk/v1;sdkv1";
+
+import "google/protobuf/struct.proto";
+
+// Principal is the normalized identity model used across accessgate-auth, accessgate-proxy, AccessGate Policy, and SDKs.
+message Principal {
+  // Subject identifier (e.g. sub claim from ID token).
+  string subject = 1;
+
+  // Normalized scopes associated with the principal.
+  repeated string scopes = 2;
+
+  // Normalized roles associated with the principal.
+  repeated string roles = 3;
+
+  // Normalized claims, including standard OIDC claims and provider-specific data.
+  google.protobuf.Struct claims = 4;
+
+  // Optional tenant context for multi-tenant scenarios.
+  google.protobuf.Struct tenant_context = 5;
+
+  // Access token associated with this principal, when available.
+  string access_token = 6;
+
+  // Expiry of the principal (Unix seconds).
+  int64 expires_at = 7;
+}
+
+// Session represents the persisted auth session (tokens and claims).
+message Session {
+  string id = 1;
+  string access_token = 2;
+  string refresh_token = 3;
+  string id_token = 4;
+  int64 expires_at = 5;
+  google.protobuf.Struct claims = 6;
+  google.protobuf.Struct tenant_context = 7;
+}
+
+// AuthContext is the shared context passed between components and exposed to SDKs.
+message AuthContext {
+  Principal principal = 1;
+  Session session = 2;
+}
+

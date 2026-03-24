@@ -1,0 +1,12 @@
+* text=auto eol=lf
+
+# Normalize Go and TS/JS files
+*.go text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+
+# Keep executable scripts as-is
+scripts/** text eol=lf
+

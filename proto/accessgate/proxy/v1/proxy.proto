@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package accessgate.proxy.v1;
+
+option go_package = "github.com/ArmanAvanesyan/accessgate/proto/gen/go/accessgate/proxy/v1;proxyv1";
+
+import "accessgate/sdk/v1/identity.proto";
+
+// DenyReason is a structured explanation for why a request was denied.
+message DenyReason {
+  // Machine-readable reason code (e.g. "unauthorized", "forbidden", "policy_error").
+  string code = 1;
+
+  // Human-readable message safe to show in logs and client error payloads.
+  string message = 2;
+}
+
+// Route describes the selected route/upstream for the request.
+message Route {
+  string id = 1;
+  string upstream_url = 2;
+}
+
+// RequestDecisionRequest asks the proxy runtime to decide on a request.
+message DecideRequest {
+  // Normalized protocol (http, https, grpc, graphql, etc.).
+  string protocol = 1;
+  string method = 2;
+  string path = 3;
+
+  // Raw HTTP headers and cookies from the incoming request.
+  map<string, string> headers = 4;
+  map<string, string> cookies = 5;
+
+  // Optional body metadata (e.g. GraphQL operation name, gRPC service/method).
+  string graphql_operation = 6;
+  string grpc_service = 7;
+  string grpc_method = 8;
+
+  // Resolved principal, if already known (e.g. from session or JWT).
+  accessgate.sdk.v1.Principal principal = 9;
+}
+
+message DecideResponse {
+  // Whether the request is allowed to proceed.
+  bool allow = 1;
+
+  // HTTP status code to return when not allowed.
+  uint32 status_code = 2;
+
+  // Headers to add on the upstream request when allowed.
+  map<string, string> upstream_headers = 3;
+
+  // Selected route/upstream, when applicable.
+  Route route = 4;
+
+  // Structured deny reason, when allow == false.
+  DenyReason deny_reason = 5;
+}
+
+// PrincipalIntrospectionRequest resolves a principal from an incoming request.
+message IntrospectPrincipalRequest {
+  map<string, string> headers = 1;
+  map<string, string> cookies = 2;
+}
+
+message IntrospectPrincipalResponse {
+  accessgate.sdk.v1.Principal principal = 1;
+}
+
+// RouteResolutionRequest resolves the route/upstream without a full decision.
+message ResolveRouteRequest {
+  string protocol = 1;
+  string method = 2;
+  string path = 3;
+}
+
+message ResolveRouteResponse {
+  Route route = 1;
+}
+
+service ProxyService {
+  rpc Decide(DecideRequest) returns (DecideResponse);
+  rpc IntrospectPrincipal(IntrospectPrincipalRequest) returns (IntrospectPrincipalResponse);
+  rpc ResolveRoute(ResolveRouteRequest) returns (ResolveRouteResponse);
+}
+

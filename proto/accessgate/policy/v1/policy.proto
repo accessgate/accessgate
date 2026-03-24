@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package accessgate.policy.v1;
+
+option go_package = "github.com/ArmanAvanesyan/accessgate/proto/gen/go/accessgate/policy/v1;policyv1";
+
+import "google/protobuf/struct.proto";
+import "accessgate/sdk/v1/identity.proto";
+
+// EvaluationInput is the normalized policy input model.
+message EvaluationInput {
+  string protocol = 1;
+  string method = 2;
+  string path = 3;
+
+  string graphql_operation = 4;
+  string grpc_service = 5;
+  string grpc_method = 6;
+
+  // Normalized HTTP headers of the incoming request.
+  map<string, string> headers = 7;
+
+  // Resolved principal, if present.
+  accessgate.sdk.v1.Principal principal = 8;
+
+  // Arbitrary attributes or context passed into policy.
+  google.protobuf.Struct attributes = 9;
+}
+
+// Obligation is a structured instruction from policy back to the proxy/runtime.
+message Obligation {
+  string key = 1;
+  google.protobuf.Value value = 2;
+}
+
+// EvaluationDecision is the outcome of evaluating a policy against an input.
+message EvaluationDecision {
+  bool allow = 1;
+  uint32 status_code = 2;
+  map<string, string> headers = 3;
+  string reason = 4;
+  repeated Obligation obligations = 5;
+}
+
+// TraceEvent is a structured trace entry emitted during policy evaluation.
+message TraceEvent {
+  string stage = 1;
+  string message = 2;
+  google.protobuf.Struct fields = 3;
+}
+
+message EvaluateRequest {
+  EvaluationInput input = 1;
+
+  // Whether to include trace/debug information in the response.
+  bool include_trace = 2;
+}
+
+message EvaluateResponse {
+  EvaluationDecision decision = 1;
+  repeated TraceEvent trace = 2;
+}
+
+service PolicyService {
+  rpc Evaluate(EvaluateRequest) returns (EvaluateResponse);
+}
+

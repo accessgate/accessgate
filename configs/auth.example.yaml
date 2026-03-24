@@ -1,0 +1,32 @@
+# accessgate-auth example config (YAML).
+# Use with CONFIG_PATH or AUTH_CONFIG when using a YAML-capable loader.
+# For JSON loader use configs/auth.example.json instead.
+
+oidc_issuer: "https://idp.example.com"
+oidc_redirect_uri: "https://portal.example.com/callback"
+oidc_client_id: "your-client-id"
+oidc_client_secret: ""  # set via OIDC_CLIENT_SECRET env var
+oidc_scopes:
+  - openid
+  - profile
+oidc_audience: ""
+oidc_claims_source: "id_token"
+redis_url: "redis://localhost:6379"
+session_redis_prefix: "auth"
+session_ttl_seconds: 36000
+session_pkce_ttl_seconds: 300
+session_refresh_lock_ttl_seconds: 15
+session_refresh_early_seconds: 60
+cookie_name: "__Host-ess_session"
+cookie_signing_secret: ""  # set via COOKIE_SIGNING_SECRET env var
+cookie_secure: true
+cookie_same_site: "lax"
+cookie_domain: ""
+app_base_url: "https://portal.example.com"
+login_error_redirect_path: "/login?error=oidc_error"
+allowed_redirect_origins: []
+allowed_redirect_paths: ["/"]
+http_port: "8080"
+post_login_webhook_url: ""
+session_enrichment_api: ""
+cors_allowed_origins: []

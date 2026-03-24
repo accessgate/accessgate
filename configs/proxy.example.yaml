@@ -1,0 +1,21 @@
+# accessgate-proxy example config (YAML).
+# Use with CONFIG_PATH or PROXY_CONFIG when using a YAML-capable loader.
+# For JSON loader use configs/proxy.example.json instead.
+
+upstream_url: "https://api.example.com"
+proxy_path_prefix: "/graphql"
+require_auth: true
+auth_url: "https://auth.example.com"
+cookie_name: "__Host-ess_session"
+http_port: "8081"
+policy_engine: "wasm"
+policy_bundle_path: ""
+policy_fallback_allow: true
+headers_user_id_claim: "sub"
+headers_email_claim: "email"
+headers_name_claim: "name"
+headers_preferred_username_claim: "preferred_username"
+headers_roles_claim: "realm_access.roles"
+headers_groups_claim: "groups"
+headers_tenant_id_claim: ""
+headers_admin_role: "admin"

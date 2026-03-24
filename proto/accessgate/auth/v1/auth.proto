@@ -1,0 +1,102 @@
+syntax = "proto3";
+
+package accessgate.auth.v1;
+
+option go_package = "github.com/ArmanAvanesyan/accessgate/proto/gen/go/accessgate/auth/v1;authv1";
+
+import "accessgate/sdk/v1/identity.proto";
+
+// LoginRequest starts an authentication flow and returns a redirect URL.
+message LoginRequest {
+  // URL the client ultimately wants to return to after login.
+  string return_url = 1;
+
+  // Optional opaque state/correlation ID provided by the caller.
+  string state = 2;
+
+  // HTTP request context (headers, cookies, client info) when applicable.
+  map<string, string> headers = 3;
+  map<string, string> cookies = 4;
+}
+
+message LoginResponse {
+  // Redirect URL the client should send the user-agent to.
+  string redirect_url = 1;
+
+  // Correlation ID to send back on callback.
+  string state = 2;
+}
+
+// CallbackRequest completes an authentication flow and establishes a session.
+message CallbackRequest {
+  // Full callback URL (including query string) received by accessgate-auth.
+  string callback_url = 1;
+
+  // Cookies and headers from the incoming callback HTTP request.
+  map<string, string> headers = 2;
+  map<string, string> cookies = 3;
+}
+
+message CallbackResponse {
+  // Established auth context (principal + session).
+  accessgate.sdk.v1.AuthContext auth = 1;
+
+  // Cookies that must be set on the caller's HTTP response (e.g. session cookie).
+  map<string, string> set_cookies = 2;
+}
+
+// RefreshRequest refreshes an existing session (e.g. via refresh token).
+message RefreshRequest {
+  // Current session identifier, if known.
+  string session_id = 1;
+
+  // Existing cookies so accessgate-auth can resolve the session.
+  map<string, string> cookies = 2;
+}
+
+message RefreshResponse {
+  accessgate.sdk.v1.AuthContext auth = 1;
+  map<string, string> set_cookies = 2;
+}
+
+// LogoutRequest ends the current session.
+message LogoutRequest {
+  string session_id = 1;
+  map<string, string> cookies = 2;
+
+  // Optional post-logout redirect URL.
+  string post_logout_redirect_url = 3;
+}
+
+message LogoutResponse {
+  // Cookies that must be cleared on the caller's HTTP response.
+  map<string, string> clear_cookies = 1;
+
+  // Optional redirect URL after logout.
+  string redirect_url = 2;
+}
+
+// IntrospectSessionRequest inspects a session and returns its current state.
+message IntrospectSessionRequest {
+  string session_id = 1;
+  map<string, string> cookies = 2;
+}
+
+message IntrospectSessionResponse {
+  accessgate.sdk.v1.AuthContext auth = 1;
+
+  // When the session will expire.
+  int64 expires_at = 2;
+
+  // Whether the session is still active.
+  bool active = 3;
+}
+
+service AuthService {
+  rpc Login(LoginRequest) returns (LoginResponse);
+  rpc Callback(CallbackRequest) returns (CallbackResponse);
+  rpc Refresh(RefreshRequest) returns (RefreshResponse);
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+  rpc IntrospectSession(IntrospectSessionRequest) returns (IntrospectSessionResponse);
+}
+

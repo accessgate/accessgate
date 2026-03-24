@@ -1,0 +1,30 @@
+# Minimal GoReleaser config for accessgate (binaries only; Docker images via separate workflow).
+version: 2
+
+project_name: accessgate
+
+builds:
+  - id: accessgate-auth
+    main: ./cmd/accessgate-auth
+    binary: accessgate-auth
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+  - id: accessgate-proxy
+    main: ./cmd/accessgate-proxy
+    binary: accessgate-proxy
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+
+archives:
+  - id: default
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"

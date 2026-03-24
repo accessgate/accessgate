@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AccessGate auth (OIDC/session) config",
+  "type": "object",
+  "properties": {
+    "admin_secret": {
+      "type": "string"
+    },
+    "allowed_redirect_origins": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "allowed_redirect_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "app_base_url": {
+      "type": "string"
+    },
+    "cookie_domain": {
+      "type": "string"
+    },
+    "cookie_name": {
+      "type": "string"
+    },
+    "cookie_same_site": {
+      "type": "string"
+    },
+    "cookie_secure": {
+      "type": "boolean"
+    },
+    "cookie_signing_secret": {
+      "type": "string"
+    },
+    "cors_allowed_origins": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "http_port": {
+      "type": "string"
+    },
+    "login_error_redirect_path": {
+      "type": "string"
+    },
+    "oidc_audience": {
+      "type": "string"
+    },
+    "oidc_claims_source": {
+      "type": "string"
+    },
+    "oidc_client_id": {
+      "type": "string"
+    },
+    "oidc_client_secret": {
+      "type": "string"
+    },
+    "oidc_issuer": {
+      "type": "string"
+    },
+    "oidc_redirect_uri": {
+      "type": "string"
+    },
+    "oidc_scopes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "post_login_webhook_url": {
+      "type": "string"
+    },
+    "provider_plugin_id": {
+      "type": "string"
+    },
+    "redis_url": {
+      "type": "string"
+    },
+    "session_enrichment_api": {
+      "type": "string"
+    },
+    "session_pkce_ttl_seconds": {
+      "type": "integer"
+    },
+    "session_redis_prefix": {
+      "type": "string"
+    },
+    "session_refresh_early_seconds": {
+      "type": "integer"
+    },
+    "session_refresh_lock_ttl_seconds": {
+      "type": "integer"
+    },
+    "session_ttl_seconds": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "oidc_issuer",
+    "oidc_redirect_uri",
+    "oidc_client_id",
+    "oidc_client_secret",
+    "oidc_scopes",
+    "oidc_audience",
+    "oidc_claims_source",
+    "redis_url",
+    "session_redis_prefix",
+    "session_ttl_seconds",
+    "session_pkce_ttl_seconds",
+    "session_refresh_lock_ttl_seconds",
+    "session_refresh_early_seconds",
+    "cookie_name",
+    "cookie_signing_secret",
+    "cookie_secure",
+    "cookie_same_site",
+    "cookie_domain",
+    "app_base_url",
+    "login_error_redirect_path",
+    "allowed_redirect_origins",
+    "allowed_redirect_paths",
+    "http_port",
+    "admin_secret",
+    "post_login_webhook_url",
+    "session_enrichment_api",
+    "cors_allowed_origins",
+    "provider_plugin_id"
+  ]
+}
