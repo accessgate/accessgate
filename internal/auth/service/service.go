@@ -21,6 +21,7 @@ import (
 	"github.com/ArmanAvanesyan/accessgate/pkg/cookie"
 	"github.com/ArmanAvanesyan/accessgate/pkg/observability"
 	"github.com/ArmanAvanesyan/accessgate/pkg/oidc"
+	pkgsdk "github.com/ArmanAvanesyan/accessgate/pkg/sdk"
 	pkgsession "github.com/ArmanAvanesyan/accessgate/pkg/session"
 	"github.com/ArmanAvanesyan/accessgate/pkg/token"
 )
@@ -485,62 +486,7 @@ func (s *Service) Logout(ctx context.Context, req auth.LogoutRequest) (*auth.Log
 }
 
 func sessionToUser(sess *pkgsession.Session) *auth.SessionUser {
-	user := &auth.SessionUser{
-		Claims: sess.Claims,
-	}
-	if sub, ok := sess.Claims["sub"].(string); ok {
-		user.Sub = sub
-	}
-	if email, ok := sess.Claims["email"].(string); ok {
-		user.Email = email
-	}
-	if u, ok := sess.Claims["preferred_username"].(string); ok {
-		user.PreferredUsername = u
-	}
-	if name, ok := sess.Claims["name"].(string); ok {
-		user.Name = name
-	}
-	if r, ok := sess.Claims["realm_access"].(map[string]any); ok {
-		if roles, ok := r["roles"].([]interface{}); ok {
-			for _, x := range roles {
-				if s, ok := x.(string); ok {
-					user.Roles = append(user.Roles, s)
-				}
-			}
-		}
-	}
-	if user.Roles == nil {
-		if r, ok := sess.Claims["roles"].([]interface{}); ok {
-			for _, x := range r {
-				if s, ok := x.(string); ok {
-					user.Roles = append(user.Roles, s)
-				}
-			}
-		}
-	}
-	if g, ok := sess.Claims["groups"].([]interface{}); ok {
-		for _, x := range g {
-			if s, ok := x.(string); ok {
-				user.Groups = append(user.Groups, s)
-			}
-		}
-	}
-	for _, r := range user.Roles {
-		if r == "admin" || r == "administrator" {
-			user.IsAdmin = true
-			break
-		}
-	}
-	if sess.TenantContext != nil {
-		user.TenantContext = map[string]any{
-			"tenant_id":   sess.TenantContext.TenantID,
-			"tenant_slug": sess.TenantContext.TenantSlug,
-			"status":      sess.TenantContext.Status,
-			"locale":      sess.TenantContext.Locale,
-			"timezone":    sess.TenantContext.Timezone,
-		}
-	}
-	return user
+	return pkgsdk.SessionUserFromSession(sess)
 }
 
 func generateSessionID() (string, error) {
