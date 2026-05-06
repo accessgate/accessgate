@@ -65,7 +65,8 @@
           "id",
           "type",
           "raw"
-        ]
+        ],
+        "additionalProperties": false
       }
     },
     "plugins_manifest_dir": {
@@ -113,5 +114,6 @@
     "headers_groups_claim",
     "headers_tenant_id_claim",
     "headers_admin_role"
-  ]
+  ],
+  "additionalProperties": false
 }

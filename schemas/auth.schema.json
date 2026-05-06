@@ -129,5 +129,6 @@
     "session_enrichment_api",
     "cors_allowed_origins",
     "provider_plugin_id"
-  ]
+  ],
+  "additionalProperties": false
 }
