@@ -3,8 +3,7 @@ package httpserver
 import (
 	"testing"
 
-	"github.com/ArmanAvanesyan/accessgate/internal/policy"
-	"github.com/ArmanAvanesyan/accessgate/internal/proxy"
+	pkgproxy "github.com/ArmanAvanesyan/accessgate/internal/authz"
 	"github.com/ArmanAvanesyan/accessgate/internal/proxy/config"
 )
 
@@ -15,8 +14,8 @@ func TestNewReturnsServerWithHandler(t *testing.T) {
 		AuthURL:         "http://localhost:8080",
 		CookieName:      "test",
 	}
-	client := proxy.NewAuthClient(cfg.AuthURL, cfg.CookieName)
-	s := New(cfg, client, policy.NewWASMRuntime(policy.DefaultFallbackAllow), nil, nil, nil, nil, nil)
+	engine := &pkgproxy.DefaultEngine{UpstreamURL: cfg.UpstreamURL}
+	s := New(cfg, engine, nil, nil)
 	if s == nil {
 		t.Fatalf("expected non-nil Server")
 	}

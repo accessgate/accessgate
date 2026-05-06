@@ -37,3 +37,27 @@ func TestAuthPrincipalResolver(t *testing.T) {
 		t.Fatal(p.AccessToken)
 	}
 }
+
+func TestResolveResponseToPrincipal_NormalizesRealmAccessRoles(t *testing.T) {
+	p := resolveResponseToPrincipal(&ResolveResponse{
+		Claims: map[string]any{
+			"sub": "user2",
+			"realm_access": map[string]any{
+				"roles": []any{"editor", "viewer"},
+			},
+		},
+	})
+	if p == nil {
+		t.Fatal("expected principal")
+	}
+	if len(p.Roles) != 2 || p.Roles[0] != "editor" || p.Roles[1] != "viewer" {
+		t.Fatalf("unexpected roles: %+v", p.Roles)
+	}
+	roles, ok := p.Claims["roles"].([]string)
+	if !ok {
+		t.Fatalf("expected normalized []string roles in claims, got %#v", p.Claims["roles"])
+	}
+	if len(roles) != 2 || roles[0] != "editor" || roles[1] != "viewer" {
+		t.Fatalf("unexpected normalized claims roles: %+v", roles)
+	}
+}

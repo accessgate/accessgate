@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"testing"
 
 	"github.com/ArmanAvanesyan/accessgate/internal/plugin"
@@ -24,7 +25,7 @@ func TestBuildPolicyEngineWASMNoBundle(t *testing.T) {
 
 func TestBuildPipelinePluginsEmpty(t *testing.T) {
 	cfg := &config.Config{}
-	pl, err := buildPipelinePlugins(cfg, plugin.New())
+	pl, err := buildPipelinePlugins(context.Background(), cfg, plugin.New())
 	if err != nil || pl != nil {
 		t.Fatalf("%v %v", pl, err)
 	}

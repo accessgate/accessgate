@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/ArmanAvanesyan/accessgate/internal/authz"
-	"github.com/ArmanAvanesyan/accessgate/pkg/token"
 )
 
 // AuthPrincipalResolver implements authz.PrincipalResolver by calling accessgate-auth resolve.
@@ -31,24 +30,12 @@ func resolveResponseToPrincipal(r *ResolveResponse) *token.Principal {
 	if r == nil {
 		return nil
 	}
-	claims := token.NormalizeClaims(r.Claims)
-	if claims == nil {
-		claims = r.Claims
-	}
+	claims := normalizeClaims(r.Claims)
 	if claims == nil {
 		claims = make(map[string]any)
 	}
 	sub, _ := claims["sub"].(string)
-	var roles []string
-	if r, ok := claims["roles"].([]string); ok {
-		roles = r
-	} else if arr, ok := claims["roles"].([]interface{}); ok {
-		for _, x := range arr {
-			if s, ok := x.(string); ok {
-				roles = append(roles, s)
-			}
-		}
-	}
+	roles := extractRoles(claims)
 	var exp time.Time
 	if v, ok := claims["exp"]; ok {
 		switch t := v.(type) {
@@ -67,4 +54,50 @@ func resolveResponseToPrincipal(r *ResolveResponse) *token.Principal {
 		TenantContext: r.TenantContext,
 	}
 	return p
+}
+
+func normalizeClaims(claims map[string]any) map[string]any {
+	if claims == nil {
+		return nil
+	}
+	out := make(map[string]any, len(claims)+1)
+	for k, v := range claims {
+		out[k] = v
+	}
+	if roles := extractRoles(claims); len(roles) > 0 {
+		out["roles"] = roles
+	}
+	return out
+}
+
+func extractRoles(claims map[string]any) []string {
+	if claims == nil {
+		return nil
+	}
+	if realmAccess, ok := claims["realm_access"].(map[string]any); ok {
+		if roles := stringsFromAnySlice(realmAccess["roles"]); len(roles) > 0 {
+			return roles
+		}
+	}
+	if roles, ok := claims["roles"].([]string); ok {
+		return append([]string(nil), roles...)
+	}
+	return stringsFromAnySlice(claims["roles"])
+}
+
+func stringsFromAnySlice(v any) []string {
+	switch t := v.(type) {
+	case []string:
+		return append([]string(nil), t...)
+	case []interface{}:
+		var out []string
+		for _, x := range t {
+			if s, ok := x.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
 }
