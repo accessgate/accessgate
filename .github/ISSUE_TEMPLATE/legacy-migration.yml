@@ -1,0 +1,42 @@
+name: Legacy migration
+description: Capture work mined from AuthSentinel or other legacy surfaces.
+title: "[migration] "
+labels:
+  - type/migration
+  - area/migration
+  - source/authsentinel
+  - status/needs-triage
+body:
+  - type: input
+    id: legacy_component
+    attributes:
+      label: Legacy component
+      placeholder: e.g. sdk, plugin-traefik, internal/auth
+    validations:
+      required: true
+  - type: dropdown
+    id: destination
+    attributes:
+      label: Proposed destination
+      options:
+        - AccessGate core
+        - AccessGate ecosystem repo
+        - Docs only
+        - Archive / legacy only
+        - Needs decision
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: What is worth keeping?
+    validations:
+      required: true
+  - type: textarea
+    id: migration_plan
+    attributes:
+      label: Proposed migration plan
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks / unknowns

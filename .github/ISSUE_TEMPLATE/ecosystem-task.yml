@@ -1,0 +1,43 @@
+name: Ecosystem task
+description: Track SDK, plugin, packaging, or other ecosystem work.
+title: "[ecosystem] "
+labels:
+  - type/feature
+  - source/policyfront
+  - status/needs-triage
+body:
+  - type: input
+    id: repo
+    attributes:
+      label: Repo or component
+      placeholder: e.g. policyfront/sdk-go
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - SDK
+        - Plugin
+        - Packaging
+        - Observability
+        - Playground
+        - Bundles
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Task summary
+    validations:
+      required: true
+  - type: textarea
+    id: ownership
+    attributes:
+      label: Ownership decision needed
+      description: Keep external, rehome under accessgate, or archive?
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional notes

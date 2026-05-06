@@ -1,0 +1,36 @@
+name: Documentation gap
+description: Track missing or weak documentation.
+title: "[docs] "
+labels:
+  - type/docs
+  - area/docs
+  - status/needs-triage
+body:
+  - type: input
+    id: doc_area
+    attributes:
+      label: Documentation area
+      placeholder: e.g. migration guide, repo map, sdk-go quickstart
+    validations:
+      required: true
+  - type: dropdown
+    id: audience
+    attributes:
+      label: Audience
+      options:
+        - User
+        - Operator
+        - Contributor
+        - SDK Consumer
+    validations:
+      required: true
+  - type: textarea
+    id: gap
+    attributes:
+      label: What is missing or unclear?
+    validations:
+      required: true
+  - type: textarea
+    id: done_when
+    attributes:
+      label: Done when

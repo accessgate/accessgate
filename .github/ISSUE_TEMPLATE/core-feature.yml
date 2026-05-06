@@ -1,0 +1,45 @@
+name: Core feature
+description: Propose or track a core AccessGate runtime feature.
+title: "[core] "
+labels:
+  - type/feature
+  - area/core-runtime
+  - source/accessgate
+  - status/needs-triage
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What should be built or changed?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Core Runtime
+        - Auth
+        - Proxy
+        - Policy
+        - Config
+        - Test
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+  - type: textarea
+    id: docs
+    attributes:
+      label: Docs impact

@@ -1,0 +1,87 @@
+- name: area/core-runtime
+  color: "1D76DB"
+  description: Core runtime behavior, shared engine, and core service boundaries.
+- name: area/auth
+  color: "0E8A16"
+  description: Authentication, identity, tokens, sessions, and login flows.
+- name: area/proxy
+  color: "0052CC"
+  description: Proxy, gateway, and request enforcement behavior.
+- name: area/policy
+  color: "5319E7"
+  description: Policy evaluation, bundles, rules, and authorization semantics.
+- name: area/sdk
+  color: "FBCA04"
+  description: SDK design, client libraries, and integration surfaces.
+- name: area/plugin
+  color: "C2E0C6"
+  description: Gateway or platform plugin work.
+- name: area/docs
+  color: "D4C5F9"
+  description: Documentation, guides, onboarding, and examples.
+- name: area/packaging
+  color: "F9D0C4"
+  description: Docker, Helm, release packaging, and distribution.
+- name: area/observability
+  color: "BFDADC"
+  description: Logging, tracing, metrics, and runtime visibility.
+- name: area/migration
+  color: "FEF2C0"
+  description: Consolidation, lineage, migration, and rehoming work.
+- name: source/accessgate
+  color: "0052CC"
+  description: Work originating from the current AccessGate surface.
+- name: source/authsentinel
+  color: "B60205"
+  description: Work mined from the legacy AuthSentinel monorepo.
+- name: source/policyfront
+  color: "5319E7"
+  description: Work originating from PolicyFront-era split repos.
+- name: type/feature
+  color: "0E8A16"
+  description: New product or technical capability.
+- name: type/bug
+  color: "D73A4A"
+  description: Broken behavior or regression.
+- name: type/docs
+  color: "1D76DB"
+  description: Documentation change or gap.
+- name: type/migration
+  color: "FBCA04"
+  description: Migration, rename, extraction, or consolidation task.
+- name: type/adr
+  color: "5319E7"
+  description: Architecture decision record or governance decision.
+- name: type/archive
+  color: "6A737D"
+  description: Freeze, deprecate, or archive work.
+- name: type/research
+  color: "C5DEF5"
+  description: Investigation, audit, or discovery work.
+- name: status/needs-triage
+  color: "D4C5F9"
+  description: Newly captured and awaiting triage.
+- name: status/ready
+  color: "0E8A16"
+  description: Ready to be worked.
+- name: status/in-progress
+  color: "FBCA04"
+  description: Currently being worked.
+- name: status/blocked
+  color: "D73A4A"
+  description: Blocked by dependency or decision.
+- name: status/done
+  color: "1D76DB"
+  description: Completed work.
+- name: priority/p0
+  color: "B60205"
+  description: Critical now.
+- name: priority/p1
+  color: "D93F0B"
+  description: Important soon.
+- name: priority/p2
+  color: "FBCA04"
+  description: Important but not urgent.
+- name: priority/p3
+  color: "C2E0C6"
+  description: Nice to have / later.

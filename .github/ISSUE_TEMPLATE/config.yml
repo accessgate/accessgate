@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: AccessGate governance and roadmap
+    url: ../docs/GITHUB-GOVERNANCE.md
+    about: Read the current AccessGate governance, project, and label model first.
