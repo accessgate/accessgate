@@ -13,6 +13,8 @@ import (
 	"github.com/ArmanAvanesyan/accessgate/pkg/token"
 )
 
+var _ pkgsession.RuntimeStoreProvider = (*runtimeStoreProviderStub)(nil)
+
 type inMemorySessionStore struct {
 	data map[string]*pkgsession.Session
 }
@@ -63,6 +65,25 @@ func (s *inMemoryRefreshLockStore) Obtain(ctx context.Context, sessionID string,
 	return true, nil
 }
 func (s *inMemoryRefreshLockStore) Release(ctx context.Context, sessionID string) error { return nil }
+
+// runtimeStoreProviderStub gives tests a concrete RuntimeStoreProvider seam.
+type runtimeStoreProviderStub struct {
+	sessions    pkgsession.SessionStore
+	pkce        pkgsession.PKCEStore
+	refreshLock pkgsession.RefreshLockStore
+}
+
+func (s *runtimeStoreProviderStub) SessionStore() pkgsession.SessionStore {
+	return s.sessions
+}
+
+func (s *runtimeStoreProviderStub) PKCEStore() pkgsession.PKCEStore {
+	return s.pkce
+}
+
+func (s *runtimeStoreProviderStub) RefreshLockStore() pkgsession.RefreshLockStore {
+	return s.refreshLock
+}
 
 type mockProvider struct {
 	authCalls           int
@@ -140,6 +161,38 @@ func newTestConfig(t *testing.T) *config.Config {
 		t.Fatalf("config.Validate: %v", err)
 	}
 	return cfg
+}
+
+func TestService_NewWithRuntimeStoreProvider(t *testing.T) {
+	ctx := context.Background()
+	cfg := newTestConfig(t)
+
+	stores := &runtimeStoreProviderStub{
+		sessions:    newInMemorySessionStore(),
+		pkce:        newInMemoryPKCEStore(),
+		refreshLock: &inMemoryRefreshLockStore{},
+	}
+	cookieManager := cookie.NewSignedManager(cfg.CookieSigningSecret)
+	prov := &mockProvider{}
+
+	svc, err := NewWithRuntimeStoreProvider(cfg, stores, cookieManager, token.JWKSSource(nil), prov, nil, nil)
+	if err != nil {
+		t.Fatalf("NewWithRuntimeStoreProvider: %v", err)
+	}
+	if svc == nil {
+		t.Fatal("expected service")
+	}
+
+	resp, err := svc.LoginStart(ctx, auth.LoginStartRequest{RedirectTo: "/welcome"})
+	if err != nil {
+		t.Fatalf("LoginStart: %v", err)
+	}
+	if resp == nil || resp.RedirectURL == "" {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+	if prov.authCalls != 1 {
+		t.Fatalf("expected provider call, got %d", prov.authCalls)
+	}
 }
 
 func TestService_LoginStart_UsesProviderAuthorizationURL(t *testing.T) {
@@ -291,6 +344,20 @@ func TestService_Refresh_UsesProviderRefresh(t *testing.T) {
 	updated, _ := sessions.Get(ctx, sessID)
 	if updated == nil || updated.AccessToken != "access-2" {
 		t.Fatalf("expected access token to be updated, got %#v", updated)
+	}
+}
+
+func TestService_NewWithRuntimeStoreProvider_RejectsNilStores(t *testing.T) {
+	cfg := newTestConfig(t)
+	cookieManager := cookie.NewSignedManager(cfg.CookieSigningSecret)
+	prov := &mockProvider{}
+
+	svc, err := NewWithRuntimeStoreProvider(cfg, nil, cookieManager, token.JWKSSource(nil), prov, nil, nil)
+	if err == nil {
+		t.Fatal("expected error for nil stores")
+	}
+	if svc != nil {
+		t.Fatalf("expected nil service, got %+v", svc)
 	}
 }
 

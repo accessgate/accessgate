@@ -89,6 +89,32 @@ func New(
 	}, nil
 }
 
+// NewWithRuntimeStoreProvider creates an accessgate-auth Service from the runtime store seam.
+func NewWithRuntimeStoreProvider(
+	cfg *config.Config,
+	stores pkgsession.RuntimeStoreProvider,
+	cookieManager cookie.Manager,
+	jwks token.JWKSSource,
+	provider plugin.ProviderPlugin,
+	tracer observability.Tracer,
+	metrics observability.Metrics,
+) (*Service, error) {
+	if stores == nil {
+		return nil, fmt.Errorf("runtime stores are required")
+	}
+	return New(
+		cfg,
+		stores.SessionStore(),
+		stores.PKCEStore(),
+		stores.RefreshLockStore(),
+		cookieManager,
+		jwks,
+		provider,
+		tracer,
+		metrics,
+	)
+}
+
 // Session implements auth.Service.
 func (s *Service) Session(ctx context.Context, req auth.SessionRequest) (*auth.SessionResponse, error) {
 	if req.SessionCookie == "" {

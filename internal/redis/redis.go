@@ -54,6 +54,12 @@ func (s *Store) PKCEStore() session.PKCEStore { return (*pkceStoreImpl)(s) }
 // RefreshLockStore returns a session.RefreshLockStore implemented by this Store.
 func (s *Store) RefreshLockStore() session.RefreshLockStore { return (*refreshLockStoreImpl)(s) }
 
+// RevocationStore returns a session.RevocationStore implemented by this Store.
+func (s *Store) RevocationStore() session.RevocationStore { return (*revocationStoreImpl)(s) }
+
+// ReplayStore returns a session.ReplayStore implemented by this Store.
+func (s *Store) ReplayStore() session.ReplayStore { return (*replayStoreImpl)(s) }
+
 type sessionStoreImpl Store
 
 func (s *sessionStoreImpl) Get(ctx context.Context, sessionID string) (*session.Session, error) {
@@ -196,6 +202,16 @@ func (s *Store) releaseRefreshLock(ctx context.Context, sessionID string) error 
 
 // SetRevoked marks the given id (JTI or session ID) as revoked for the given TTL.
 // Used for logout-all and token revocation.
+type revocationStoreImpl Store
+
+func (s *revocationStoreImpl) SetRevoked(ctx context.Context, id string, ttl time.Duration) error {
+	return (*Store)(s).SetRevoked(ctx, id, ttl)
+}
+
+func (s *revocationStoreImpl) IsRevoked(ctx context.Context, id string) (bool, error) {
+	return (*Store)(s).IsRevoked(ctx, id)
+}
+
 func (s *Store) SetRevoked(ctx context.Context, id string, ttl time.Duration) error {
 	key := s.layout.RevokedKey(id)
 	return s.client.Set(ctx, key, "1", ttl).Err()
@@ -216,6 +232,16 @@ func (s *Store) IsRevoked(ctx context.Context, id string) (bool, error) {
 
 // RecordReplay records a key (e.g. request ID or nonce) in the replay cache with the given TTL.
 // Returns nil on success.
+type replayStoreImpl Store
+
+func (s *replayStoreImpl) RecordReplay(ctx context.Context, key string, ttl time.Duration) error {
+	return (*Store)(s).RecordReplay(ctx, key, ttl)
+}
+
+func (s *replayStoreImpl) CheckReplay(ctx context.Context, key string) (bool, error) {
+	return (*Store)(s).CheckReplay(ctx, key)
+}
+
 func (s *Store) RecordReplay(ctx context.Context, key string, ttl time.Duration) error {
 	k := s.layout.ReplayKey(key)
 	return s.client.Set(ctx, k, "1", ttl).Err()
