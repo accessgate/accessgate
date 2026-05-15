@@ -19,6 +19,20 @@ import (
 	"github.com/ArmanAvanesyan/accessgate/internal/proxy/httpserver"
 )
 
+func newProxyServer(cfg *config.Config, engine policy.Engine, pipelinePlugins []pkgproxy.PipelinePlugin) *httpserver.Server {
+	client := proxy.NewAuthClient(cfg.AuthURL, cfg.CookieName)
+
+	proxyEngine := &pkgproxy.DefaultEngine{
+		Resolver:        &proxy.AuthPrincipalResolver{Client: client, CookieName: cfg.CookieName},
+		Policy:          engine,
+		PipelinePlugins: pipelinePlugins,
+		UpstreamURL:     cfg.UpstreamURL,
+		RequireAuth:     bool(cfg.RequireAuth),
+	}
+
+	return httpserver.New(cfg, proxyEngine, nil, nil)
+}
+
 // mockAgentServer returns an httptest server that responds to GET /internal/resolve with 200 and principal claims.
 func mockAgentServer(t *testing.T, cookieName string) *httptest.Server {
 	t.Helper()
@@ -83,8 +97,7 @@ func TestProxy_AuthenticatedRequest_ForwardsToUpstreamWithHeaders(t *testing.T) 
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("config: %v", err)
 	}
-	client := proxy.NewAuthClient(cfg.AuthURL, cfg.CookieName)
-	proxySrv := httpserver.New(cfg, client, policy.NewWASMRuntime(policy.DefaultFallbackAllow), nil, nil, nil, nil, nil)
+	proxySrv := newProxyServer(cfg, policy.NewWASMRuntime(policy.DefaultFallbackAllow), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/graphql", nil)
 	req.Header.Set("Cookie", "test_session=any-session-value")
@@ -148,10 +161,8 @@ decision := {"allow": false, "status_code": 403, "reason": "denied by policy", "
 		if err := cfg.Validate(); err != nil {
 			t.Fatalf("config: %v", err)
 		}
-		client := proxy.NewAuthClient(cfg.AuthURL, cfg.CookieName)
-
 		eng := makeEngine(t, true)
-		proxySrv := httpserver.New(&cfg, client, eng, nil, nil, nil, nil, nil)
+		proxySrv := newProxyServer(&cfg, eng, nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/graphql", nil)
 		req.Header.Set("Cookie", "test_session=any-session-value")
@@ -176,10 +187,8 @@ decision := {"allow": false, "status_code": 403, "reason": "denied by policy", "
 		if err := cfg.Validate(); err != nil {
 			t.Fatalf("config: %v", err)
 		}
-		client := proxy.NewAuthClient(cfg.AuthURL, cfg.CookieName)
-
 		eng := makeEngine(t, false)
-		proxySrv := httpserver.New(&cfg, client, eng, nil, nil, nil, nil, nil)
+		proxySrv := newProxyServer(&cfg, eng, nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/graphql", nil)
 		req.Header.Set("Cookie", "test_session=any-session-value")
@@ -211,8 +220,7 @@ func TestProxy_UnauthenticatedRequest_RequireAuth_Returns401(t *testing.T) {
 	}
 	cfg.ApplyDefaults()
 	_ = cfg.Validate()
-	client := proxy.NewAuthClient(cfg.AuthURL, cfg.CookieName)
-	proxySrv := httpserver.New(cfg, client, policy.NewWASMRuntime(policy.DefaultFallbackAllow), nil, nil, nil, nil, nil)
+	proxySrv := newProxyServer(cfg, policy.NewWASMRuntime(policy.DefaultFallbackAllow), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/graphql", nil)
 	rr := httptest.NewRecorder()
@@ -242,8 +250,6 @@ func TestProxy_PipelineRatelimit_ShortCircuitsPolicyOnDeny(t *testing.T) {
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("config: %v", err)
 	}
-	client := proxy.NewAuthClient(cfg.AuthURL, cfg.CookieName)
-
 	// Main policy denies by default (503) when policy evaluation is reached.
 	eng := policy.NewWASMRuntime(policy.DefaultFallbackDeny)
 
@@ -259,7 +265,7 @@ func TestProxy_PipelineRatelimit_ShortCircuitsPolicyOnDeny(t *testing.T) {
 	}
 	pipelinePlugins := []pkgproxy.PipelinePlugin{rl}
 
-	proxySrv := httpserver.New(cfg, client, eng, pipelinePlugins, nil, nil, nil, nil)
+	proxySrv := newProxyServer(cfg, eng, pipelinePlugins)
 
 	req1 := httptest.NewRequest(http.MethodGet, "/graphql", nil)
 	req1.Header.Set("Cookie", "test_session=any-session-value")

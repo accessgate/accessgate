@@ -55,11 +55,9 @@ func main() {
 		logger.Fatalf("provider plugin: %v", err)
 	}
 
-	svc, err := service.New(
+	svc, err := service.NewWithRuntimeStoreProvider(
 		cfg,
-		store.SessionStore(),
-		store.PKCEStore(),
-		store.RefreshLockStore(),
+		store,
 		cookieManager,
 		jwks,
 		provider,

@@ -8,11 +8,9 @@ import (
 	"strings"
 
 	pkgproxy "github.com/ArmanAvanesyan/accessgate/internal/authz"
-	"github.com/ArmanAvanesyan/accessgate/internal/plugin"
 	"github.com/ArmanAvanesyan/accessgate/internal/policy"
-	"github.com/ArmanAvanesyan/accessgate/internal/proxy"
+	"github.com/ArmanAvanesyan/accessgate/internal/plugin"
 	"github.com/ArmanAvanesyan/accessgate/internal/proxy/config"
-	"github.com/ArmanAvanesyan/accessgate/pkg/observability"
 )
 
 // Server is the HTTP server for the Proxy app.
@@ -24,22 +22,10 @@ type Server struct {
 	metricsHandler http.Handler
 }
 
-// New constructs a new Server with the given config and auth client.
-// The server uses pkg/proxy.Engine with policy evaluation; when no policy bundle is loaded, fallback is allow.
+// New constructs a new Server with the given config and prebuilt proxy engine.
 // registry is optional; when set it holds discovered/registered plugins for pipeline use and admin.
-// metrics is optional; when set it records auth decisions.
 // metricsHandler is optional; when set, GET /metrics is registered (e.g. promhttp.HandlerFor(reg, ...)).
-func New(cfg *config.Config, client *proxy.AuthClient, policyEngine policy.Engine, pipelinePlugins []pkgproxy.PipelinePlugin, registry *plugin.Registry, metrics observability.Metrics, metricsHandler http.Handler, tracer observability.Tracer) *Server {
-	resolver := &proxy.AuthPrincipalResolver{Client: client, CookieName: cfg.CookieName}
-	engine := &pkgproxy.DefaultEngine{
-		Resolver:        resolver,
-		Policy:          policyEngine,
-		PipelinePlugins: pipelinePlugins,
-		UpstreamURL:     cfg.UpstreamURL,
-		RequireAuth:     bool(cfg.RequireAuth),
-		Metrics:         metrics,
-		Tracer:          tracer,
-	}
+func New(cfg *config.Config, engine pkgproxy.Engine, registry *plugin.Registry, metricsHandler http.Handler) *Server {
 	s := &Server{
 		mux:            http.NewServeMux(),
 		cfg:            cfg,

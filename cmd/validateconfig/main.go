@@ -6,12 +6,16 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	authconfig "github.com/ArmanAvanesyan/accessgate/internal/auth/config"
 	proxyconfig "github.com/ArmanAvanesyan/accessgate/internal/proxy/config"
+	"github.com/xeipuuv/gojsonschema"
+	"sigs.k8s.io/yaml"
 )
 
 func main() {
@@ -68,6 +72,10 @@ func normalizeBinary(s string) (string, string) {
 }
 
 func run(configPath, binary string) error {
+	if err := validateAgainstSchema(configPath, binary); err != nil {
+		return err
+	}
+
 	ctx := context.Background()
 	switch binary {
 	case "auth":
@@ -79,4 +87,67 @@ func run(configPath, binary string) error {
 	default:
 		return fmt.Errorf("unknown BINARY=%q (use auth or proxy)", binary)
 	}
+}
+
+func validateAgainstSchema(configPath, binary string) error {
+	schemaPath, err := findSchemaPath(binary)
+	if err != nil {
+		return err
+	}
+
+	configBytes, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("read config for schema validation: %w", err)
+	}
+
+	jsonBytes, err := yaml.YAMLToJSON(configBytes)
+	if err != nil {
+		return fmt.Errorf("parse config as json/yaml: %w", err)
+	}
+
+	var doc any
+	if err := json.Unmarshal(jsonBytes, &doc); err != nil {
+		return fmt.Errorf("decode config json: %w", err)
+	}
+
+	result, err := gojsonschema.Validate(gojsonschema.NewReferenceLoader("file://"+mustAbs(schemaPath)), gojsonschema.NewGoLoader(doc))
+	if err != nil {
+		return fmt.Errorf("schema validation failed: %w", err)
+	}
+	if result.Valid() {
+		return nil
+	}
+
+	msgs := make([]string, 0, len(result.Errors()))
+	for _, e := range result.Errors() {
+		msgs = append(msgs, e.String())
+	}
+	return fmt.Errorf("schema validation errors: %s", strings.Join(msgs, "; "))
+}
+
+func findSchemaPath(binary string) (string, error) {
+	name := binary + ".schema.json"
+
+	if wd, err := os.Getwd(); err == nil {
+		for dir := wd; ; dir = filepath.Dir(dir) {
+			candidate := filepath.Join(dir, "schemas", name)
+			if _, statErr := os.Stat(candidate); statErr == nil {
+				return candidate, nil
+			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+		}
+	}
+
+	return "", fmt.Errorf("schema not found for %q (expected schemas/%s)", binary, name)
+}
+
+func mustAbs(path string) string {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return path
+	}
+	return abs
 }
