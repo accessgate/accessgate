@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ArmanAvanesyan/accessgate/internal/authz"
+	"github.com/ArmanAvanesyan/accessgate/pkg/token"
 )
 
 // AuthPrincipalResolver implements authz.PrincipalResolver by calling accessgate-auth resolve.

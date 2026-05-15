@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	pkgproxy "github.com/ArmanAvanesyan/accessgate/internal/authz"
+	"github.com/ArmanAvanesyan/accessgate/internal/policy"
 	"github.com/ArmanAvanesyan/accessgate/internal/plugin"
 	"github.com/ArmanAvanesyan/accessgate/internal/proxy/config"
 )
@@ -152,7 +153,7 @@ func (s *Server) policyBundleStatus() map[string]any {
 	if !ok || eng == nil || eng.Policy == nil {
 		return map[string]any{"loaded": false, "message": "no policy engine"}
 	}
-	st, ok := eng.Policy.(pkgproxy.PolicyEngineWithStatus)
+	st, ok := eng.Policy.(policy.EngineWithStatus)
 	if !ok {
 		return map[string]any{"loaded": false, "message": "engine does not report status"}
 	}
