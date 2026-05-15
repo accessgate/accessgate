@@ -44,3 +44,7 @@
 - **Core decisions** live in `accessgate/accessgate`
 - **Ecosystem repo decisions** should still roll up into AccessGate planning
 - **Legacy mining** comes from `authsentinel`
+ 
+See also:
+- [RESIDUAL-SURFACES.md](./RESIDUAL-SURFACES.md)
+- [FINAL-REPO-CLASSIFICATION.md](./FINAL-REPO-CLASSIFICATION.md)
