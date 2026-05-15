@@ -11,73 +11,26 @@ import (
 	"sync"
 	"testing"
 
-	pkgproxy "github.com/accessgate/accessgate/internal/authz"
-	"github.com/accessgate/accessgate/internal/plugins/ratelimit"
-	"github.com/accessgate/accessgate/internal/policy"
-	"github.com/accessgate/accessgate/internal/proxy"
-	"github.com/accessgate/accessgate/internal/proxy/config"
-	"github.com/accessgate/accessgate/internal/proxy/httpserver"
-	"github.com/accessgate/accessgate/pkg/token"
+	pkgproxy "github.com/ArmanAvanesyan/accessgate/internal/authz"
+	"github.com/ArmanAvanesyan/accessgate/internal/plugins/ratelimit"
+	"github.com/ArmanAvanesyan/accessgate/internal/policy"
+	"github.com/ArmanAvanesyan/accessgate/internal/proxy"
+	"github.com/ArmanAvanesyan/accessgate/internal/proxy/config"
+	"github.com/ArmanAvanesyan/accessgate/internal/proxy/httpserver"
 )
-
-type testPolicyAdapter struct {
-	engine policy.Engine
-	status policy.EngineWithStatus
-}
 
 func newProxyServer(cfg *config.Config, engine policy.Engine, pipelinePlugins []pkgproxy.PipelinePlugin) *httpserver.Server {
 	client := proxy.NewAuthClient(cfg.AuthURL, cfg.CookieName)
-	adapter := &testPolicyAdapter{engine: engine}
-	if status, ok := engine.(policy.EngineWithStatus); ok {
-		adapter.status = status
-	}
 
 	proxyEngine := &pkgproxy.DefaultEngine{
 		Resolver:        &proxy.AuthPrincipalResolver{Client: client, CookieName: cfg.CookieName},
-		Policy:          adapter,
+		Policy:          engine,
 		PipelinePlugins: pipelinePlugins,
 		UpstreamURL:     cfg.UpstreamURL,
 		RequireAuth:     bool(cfg.RequireAuth),
 	}
 
 	return httpserver.New(cfg, proxyEngine, nil, nil)
-}
-
-func (a *testPolicyAdapter) Evaluate(ctx context.Context, input pkgproxy.PolicyInput) (*pkgproxy.PolicyDecision, error) {
-	decision, err := a.engine.Evaluate(ctx, policy.Input{
-		Protocol:         input.Protocol,
-		Method:           input.Method,
-		Path:             input.Path,
-		GraphQLOperation: input.GraphQLOperation,
-		GRPCService:      input.GRPCService,
-		GRPCMethod:       input.GRPCMethod,
-		Principal:        testPrincipalToToken(input.Principal),
-		Headers:          input.Headers,
-	})
-	if err != nil || decision == nil {
-		return nil, err
-	}
-	return &pkgproxy.PolicyDecision{
-		Allow:       decision.Allow,
-		StatusCode:  decision.StatusCode,
-		Headers:     decision.Headers,
-		Reason:      decision.Reason,
-		Obligations: decision.Obligations,
-	}, nil
-}
-
-func testPrincipalToToken(principal *pkgproxy.Principal) *token.Principal {
-	if principal == nil {
-		return nil
-	}
-	return &token.Principal{
-		Subject:       principal.Subject,
-		Roles:         principal.Roles,
-		Claims:        principal.Claims,
-		ExpiresAt:     principal.ExpiresAt,
-		AccessToken:   principal.AccessToken,
-		TenantContext: principal.TenantContext,
-	}
 }
 
 // mockAgentServer returns an httptest server that responds to GET /internal/resolve with 200 and principal claims.

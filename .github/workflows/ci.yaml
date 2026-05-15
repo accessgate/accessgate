@@ -52,7 +52,9 @@ jobs:
       - name: Check proto breaking changes
         # Only compare against main when running on a PR; skip on direct pushes to main.
         if: github.event_name == 'pull_request'
-        run: make proto-breaking
+        run: |
+          git fetch origin main:main
+          make proto-breaking
 
       - name: Generate protobuf code
         run: make proto-generate
