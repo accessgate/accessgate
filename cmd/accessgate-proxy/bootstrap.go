@@ -32,10 +32,11 @@ func buildProxyHandler(ctx context.Context, cfg *config.Config) (http.Handler, f
 		return nil, nil, fmt.Errorf("register built-in plugins: %w", err)
 	}
 	if cfg.PluginsManifestDir != "" {
-		if err := plugin.DiscoverFromDir(ctx, reg, cfg.PluginsManifestDir, nil); err != nil {
-			// Keep manifest discovery best-effort, matching prior bootstrap behavior.
-		} else if err := reg.BuildDependencyGraph(); err != nil {
-			// Keep dependency graph build best-effort, matching prior bootstrap behavior.
+		// Keep manifest discovery and dependency graph assembly best-effort,
+		// matching the previous bootstrap behavior while avoiding lint-only
+		// empty branches.
+		if err := plugin.DiscoverFromDir(ctx, reg, cfg.PluginsManifestDir, nil); err == nil {
+			_ = reg.BuildDependencyGraph()
 		}
 	}
 
