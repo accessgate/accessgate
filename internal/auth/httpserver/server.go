@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ArmanAvanesyan/accessgate/internal/auth/config"
@@ -19,6 +20,14 @@ import (
 // Pinger is used for readiness checks (e.g. Redis).
 type Pinger interface {
 	Ping(ctx context.Context) error
+}
+
+type delegatedSessionLookup interface {
+	FindSessionBySubjectEmail(ctx context.Context, subject, email string) (*pkgsession.Session, error)
+}
+
+type adminSessionLookupStore interface {
+	DeleteSessionsBySubjectEmail(ctx context.Context, subject, email string) (int, error)
 }
 
 // Server is the HTTP server for accessgate-auth.
@@ -56,6 +65,8 @@ func (s *Server) routes() {
 		s.mux.HandleFunc("GET /admin", s.handleAdmin)
 		s.mux.HandleFunc("PATCH /internal/session", s.handlePatchSession)
 		s.mux.HandleFunc("POST /internal/session", s.handlePatchSession)
+		s.mux.HandleFunc("POST /internal/session/revoke", s.handleRevokeSession)
+		s.mux.HandleFunc("POST /internal/token-handoff/user", s.handleTokenHandoffUser)
 	}
 	if s.metricsHandler != nil {
 		s.mux.Handle("GET /metrics", s.metricsHandler)
@@ -185,7 +196,8 @@ func (s *Server) getCookie(r *http.Request) string {
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	redirectTo := r.URL.Query().Get("redirect_to")
-	resp, err := s.svc.LoginStart(r.Context(), auth.LoginStartRequest{RedirectTo: redirectTo})
+	prompt := strings.TrimSpace(r.URL.Query().Get("prompt"))
+	resp, err := s.svc.LoginStart(r.Context(), auth.LoginStartRequest{RedirectTo: redirectTo, Prompt: prompt})
 	if err != nil {
 		http.Error(w, err.Error(), errormap.StatusFor(err))
 		return
@@ -231,6 +243,10 @@ func (s *Server) cookieOpts() (path, domain string, maxAge int, secure, httpOnly
 	domain = s.cfg.CookieDomain
 	maxAge = s.cfg.SessionTTLSeconds
 	secure = bool(s.cfg.CookieSecure)
+	if strings.HasPrefix(s.cookie, "__Host-") {
+		secure = true
+		domain = ""
+	}
 	httpOnly = true
 	sameSite = "Lax"
 	switch s.cfg.CookieSameSite {
@@ -386,4 +402,95 @@ func (s *Server) handlePatchSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) handleRevokeSession(w http.ResponseWriter, r *http.Request) {
+	if subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Admin-Secret")), []byte(s.cfg.AdminSecret)) != 1 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":"forbidden"}`))
+		return
+	}
+	store, ok := s.ping.(adminSessionLookupStore)
+	if !ok {
+		http.Error(w, "not available", http.StatusNotImplemented)
+		return
+	}
+	var body struct {
+		Lookup struct {
+			Subject string `json:"subject"`
+			Email   string `json:"email"`
+		} `json:"lookup"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	if body.Lookup.Subject == "" || body.Lookup.Email == "" {
+		http.Error(w, "lookup.subject and lookup.email required", http.StatusBadRequest)
+		return
+	}
+	deleted, err := store.DeleteSessionsBySubjectEmail(r.Context(), body.Lookup.Subject, body.Lookup.Email)
+	if err != nil {
+		http.Error(w, "session delete failed", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"revoked": deleted > 0, "deleted_count": deleted})
+}
+
+func (s *Server) handleTokenHandoffUser(w http.ResponseWriter, r *http.Request) {
+	if subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Admin-Secret")), []byte(s.cfg.AdminSecret)) != 1 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":"forbidden"}`))
+		return
+	}
+	lookup, ok := s.ping.(delegatedSessionLookup)
+	if !ok {
+		http.Error(w, "not available", http.StatusNotImplemented)
+		return
+	}
+	var body struct {
+		Lookup struct {
+			Subject       string `json:"subject"`
+			Email         string `json:"email"`
+			IdentityID    string `json:"identity_id,omitempty"`
+			Channel       string `json:"channel,omitempty"`
+			ChannelUserID string `json:"channel_user_id,omitempty"`
+		} `json:"lookup"`
+		TokenUse string `json:"token_use"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	if body.Lookup.Subject == "" || body.Lookup.Email == "" {
+		http.Error(w, "lookup.subject and lookup.email required", http.StatusBadRequest)
+		return
+	}
+	sess, err := lookup.FindSessionBySubjectEmail(r.Context(), body.Lookup.Subject, body.Lookup.Email)
+	if err != nil {
+		http.Error(w, "session lookup failed", http.StatusInternalServerError)
+		return
+	}
+	if sess == nil || sess.AccessToken == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":"no_active_delegated_token"}`))
+		return
+	}
+	resp := map[string]any{
+		"access_token":      sess.AccessToken,
+		"id_token":          sess.IDToken,
+		"scope":             "",
+		"refresh_owner":     "accessgate",
+		"access_expires_at": time.Unix(sess.ExpiresAt, 0).UTC().Format(time.RFC3339),
+	}
+	if sess.RefreshToken != "" {
+		resp["refresh_token"] = sess.RefreshToken
+		resp["refresh_owner"] = "platform-api"
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
 }

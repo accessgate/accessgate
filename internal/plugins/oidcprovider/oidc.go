@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync"
 
@@ -122,9 +123,26 @@ func (p *Plugin) AuthorizationURL(ctx context.Context, state string, codeChallen
 	if oidcClient == nil {
 		return "", fmt.Errorf("oidc provider: not configured")
 	}
-	// Extra parameters are not yet supported in the embedded client; ignore for v1.
-	_ = extraParams
-	return oidcClient.AuthURL(ctx, state, codeChallenge, nonce)
+	authURL, err := oidcClient.AuthURL(ctx, state, codeChallenge, nonce)
+	if err != nil {
+		return "", err
+	}
+	if len(extraParams) == 0 {
+		return authURL, nil
+	}
+	u, err := url.Parse(authURL)
+	if err != nil {
+		return "", err
+	}
+	q := u.Query()
+	for key, value := range extraParams {
+		if strings.TrimSpace(key) == "" || strings.TrimSpace(value) == "" {
+			continue
+		}
+		q.Set(key, value)
+	}
+	u.RawQuery = q.Encode()
+	return u.String(), nil
 }
 
 func (p *Plugin) ExchangeCode(ctx context.Context, code string, codeVerifier string, redirectURI string) (*plugin.ProviderTokens, error) {

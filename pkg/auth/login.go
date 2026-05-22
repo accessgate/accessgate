@@ -4,6 +4,8 @@ package auth
 type LoginStartRequest struct {
 	// RedirectTo is the URL or path to redirect to after successful login (validated).
 	RedirectTo string
+	// Prompt forwards supported OIDC prompt values such as "login".
+	Prompt string
 }
 
 // LoginStartResponse holds the redirect URL for login start.
