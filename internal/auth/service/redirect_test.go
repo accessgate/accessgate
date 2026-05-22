@@ -29,6 +29,14 @@ func TestValidateRedirect_KnownOriginAllowed(t *testing.T) {
 	}
 }
 
+func TestValidateRedirect_BaseOriginAllowedWithoutExplicitOrigin(t *testing.T) {
+	allowedPaths := []string{"/"}
+	result := ValidateRedirect("https://app.example.com/link/complete?state=abc", "https://app.example.com", nil, allowedPaths)
+	if result != "https://app.example.com/link/complete?state=abc" {
+		t.Fatalf("expected same-origin absolute URL to be allowed, got %q", result)
+	}
+}
+
 func TestValidateRedirect_PathAllowed(t *testing.T) {
 	allowedPaths := []string{"/"}
 	result := ValidateRedirect("/dashboard", "https://app.example.com", nil, allowedPaths)

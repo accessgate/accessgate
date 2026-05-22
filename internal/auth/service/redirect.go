@@ -36,11 +36,13 @@ func ValidateRedirect(redirectTo string, baseURL string, allowedOrigins, allowed
 		return ""
 	}
 	origin := u.Scheme + "://" + u.Host
-	allowed := false
-	for _, o := range allowedOrigins {
-		if o == origin {
-			allowed = true
-			break
+	allowed := sameOrigin(origin, baseURL)
+	if !allowed {
+		for _, o := range allowedOrigins {
+			if o == origin {
+				allowed = true
+				break
+			}
 		}
 	}
 	if !allowed {
@@ -60,4 +62,12 @@ func ValidateRedirect(redirectTo string, baseURL string, allowedOrigins, allowed
 		}
 	}
 	return redirectTo
+}
+
+func sameOrigin(origin string, baseURL string) bool {
+	base, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil || base == nil || base.Scheme == "" || base.Host == "" {
+		return false
+	}
+	return origin == base.Scheme+"://"+base.Host
 }
