@@ -90,6 +90,7 @@ type mockProvider struct {
 	authState           string
 	authChallenge       string
 	authNonce           string
+	authExtraParams     map[string]string
 	exchangeCalls       int
 	exchangeCode        string
 	exchangeVerifier    string
@@ -112,7 +113,7 @@ func (m *mockProvider) AuthorizationURL(ctx context.Context, state string, codeC
 	m.authState = state
 	m.authChallenge = codeChallenge
 	m.authNonce = nonce
-	_ = extraParams
+	m.authExtraParams = extraParams
 	return "https://idp.example/auth?state=" + state, nil
 }
 func (m *mockProvider) ExchangeCode(ctx context.Context, code string, codeVerifier string, redirectURI string) (*plugin.ProviderTokens, error) {
@@ -239,6 +240,29 @@ func TestService_LoginStart_UsesProviderAuthorizationURL(t *testing.T) {
 	}
 	if st.RedirectTo != "https://app.example.com/welcome" {
 		t.Fatalf("unexpected redirect_to: got %q", st.RedirectTo)
+	}
+}
+
+func TestService_LoginStart_ForwardsPrompt(t *testing.T) {
+	ctx := context.Background()
+	cfg := newTestConfig(t)
+
+	sessions := newInMemorySessionStore()
+	pkce := newInMemoryPKCEStore()
+	refreshLock := &inMemoryRefreshLockStore{}
+	cookieManager := cookie.NewSignedManager(cfg.CookieSigningSecret)
+
+	prov := &mockProvider{}
+	svc, err := New(cfg, sessions, pkce, refreshLock, cookieManager, token.JWKSSource(nil), prov, nil, nil)
+	if err != nil {
+		t.Fatalf("service.New: %v", err)
+	}
+
+	if _, err := svc.LoginStart(ctx, auth.LoginStartRequest{RedirectTo: "/welcome", Prompt: "login"}); err != nil {
+		t.Fatalf("LoginStart: %v", err)
+	}
+	if prov.authExtraParams["prompt"] != "login" {
+		t.Fatalf("prompt extra param = %q, want login", prov.authExtraParams["prompt"])
 	}
 }
 

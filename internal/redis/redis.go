@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ArmanAvanesyan/accessgate/pkg/observability"
@@ -91,6 +92,119 @@ func (s *Store) getSession(ctx context.Context, sessionID string) (*session.Sess
 	s.metrics.SessionStoreOp("session_get", true)
 	return &sess, nil
 }
+
+// FindSessionBySubjectEmail scans active session records and returns the first
+// non-expired session whose claims match the trusted subject/email pair.
+func (s *Store) FindSessionBySubjectEmail(ctx context.Context, subject, email string) (*session.Session, error) {
+	subject = strings.TrimSpace(subject)
+	email = strings.TrimSpace(strings.ToLower(email))
+	if subject == "" || email == "" {
+		return nil, nil
+	}
+
+	pattern := s.layout.SessionPrefix + "*"
+	var cursor uint64
+	now := time.Now()
+
+	for {
+		keys, next, err := s.client.Scan(ctx, cursor, pattern, 200).Result()
+		if err != nil {
+			return nil, err
+		}
+		for _, key := range keys {
+			data, err := s.client.Get(ctx, key).Bytes()
+			if err != nil {
+				if err == redis.Nil {
+					continue
+				}
+				return nil, err
+			}
+			var sess session.Session
+			if err := json.Unmarshal(data, &sess); err != nil {
+				continue
+			}
+			if sess.IsExpired(now) {
+				continue
+			}
+			if strings.TrimSpace(claimString(sess.Claims, "sub")) != subject {
+				continue
+			}
+			if strings.TrimSpace(strings.ToLower(claimString(sess.Claims, "email"))) != email {
+				continue
+			}
+			return &sess, nil
+		}
+		if next == 0 {
+			break
+		}
+		cursor = next
+	}
+
+	return nil, nil
+}
+
+// DeleteSessionsBySubjectEmail scans active session records and deletes every
+// non-expired session whose claims match the trusted subject/email pair.
+func (s *Store) DeleteSessionsBySubjectEmail(ctx context.Context, subject, email string) (int, error) {
+	subject = strings.TrimSpace(subject)
+	email = strings.TrimSpace(strings.ToLower(email))
+	if subject == "" || email == "" {
+		return 0, nil
+	}
+
+	pattern := s.layout.SessionPrefix + "*"
+	var cursor uint64
+	now := time.Now()
+	deleted := 0
+
+	for {
+		keys, next, err := s.client.Scan(ctx, cursor, pattern, 200).Result()
+		if err != nil {
+			return deleted, err
+		}
+		for _, key := range keys {
+			data, err := s.client.Get(ctx, key).Bytes()
+			if err != nil {
+				if err == redis.Nil {
+					continue
+				}
+				return deleted, err
+			}
+			var sess session.Session
+			if err := json.Unmarshal(data, &sess); err != nil {
+				continue
+			}
+			if sess.IsExpired(now) {
+				continue
+			}
+			if strings.TrimSpace(claimString(sess.Claims, "sub")) != subject {
+				continue
+			}
+			if strings.TrimSpace(strings.ToLower(claimString(sess.Claims, "email"))) != email {
+				continue
+			}
+			if err := s.deleteSession(ctx, sess.ID); err != nil {
+				return deleted, err
+			}
+			deleted++
+		}
+		if next == 0 {
+			break
+		}
+		cursor = next
+	}
+
+	return deleted, nil
+}
+
+func claimString(claims map[string]any, key string) string {
+	if claims == nil {
+		return ""
+	}
+	v, _ := claims[key].(string)
+	return v
+}
+
 func (s *Store) setSession(ctx context.Context, sessionID string, sess *session.Session, ttlSeconds int) error {
 	key := s.layout.SessionKey(sessionID)
 	data, err := json.Marshal(sess)

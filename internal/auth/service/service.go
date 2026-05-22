@@ -175,7 +175,11 @@ func (s *Service) LoginStart(ctx context.Context, req auth.LoginStartRequest) (*
 	}
 	pkceStoreSpan.End()
 	_, authURLSpan := s.tracer.StartSpan(ctx, "auth.oidc_authorization_url")
-	authURL, err := s.provider.AuthorizationURL(ctx, state, challenge, nonce, nil)
+	var extraParams map[string]string
+	if prompt := strings.TrimSpace(req.Prompt); prompt != "" {
+		extraParams = map[string]string{"prompt": prompt}
+	}
+	authURL, err := s.provider.AuthorizationURL(ctx, state, challenge, nonce, extraParams)
 	if err != nil {
 		authURLSpan.End()
 		return nil, err
