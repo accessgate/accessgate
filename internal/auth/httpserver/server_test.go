@@ -210,7 +210,18 @@ func TestTokenHandoffUser(t *testing.T) {
 }
 
 func TestTokenHandoffUserRefreshesNearExpirySession(t *testing.T) {
-	cfg := &config.Config{HTTPPort: "8080", CookieName: "test", SessionTTLSeconds: 3600, CookieSigningSecret: "test-cookie-signing-secret-32bytes", AdminSecret: "expected-secret"}
+	cfg := &config.Config{
+		OIDCIssuer:          "https://issuer.example",
+		OIDCRedirectURI:     "https://app.example.com/callback",
+		OIDCClientID:        "client-1",
+		RedisURL:            "redis://localhost:6379",
+		CookieSigningSecret: "test-cookie-signing-secret-32bytes",
+		AppBaseURL:          "https://app.example.com",
+		HTTPPort:            "8080",
+		CookieName:          "test",
+		SessionTTLSeconds:   3600,
+		AdminSecret:         "expected-secret",
+	}
 	cfg.ApplyDefaults()
 
 	store := &fakeLookupStore{byID: map[string]*pkgsession.Session{
