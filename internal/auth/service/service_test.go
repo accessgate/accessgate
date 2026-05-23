@@ -371,6 +371,50 @@ func TestService_Refresh_UsesProviderRefresh(t *testing.T) {
 	}
 }
 
+func TestService_Resolve_RefreshesNearExpiry(t *testing.T) {
+	ctx := context.Background()
+	cfg := newTestConfig(t)
+
+	sessions := newInMemorySessionStore()
+	pkce := newInMemoryPKCEStore()
+	refreshLock := &inMemoryRefreshLockStore{}
+	cookieManager := cookie.NewSignedManager(cfg.CookieSigningSecret)
+
+	sessID := "sess-resolve"
+	sessions.data[sessID] = &pkgsession.Session{
+		ID:           sessID,
+		AccessToken:  "access-1",
+		RefreshToken: "refresh-1",
+		ExpiresAt:    time.Now().Unix() + int64(cfg.SessionRefreshEarlySeconds/2),
+		Claims:       map[string]any{"sub": "u1"},
+	}
+
+	prov := &mockProvider{}
+	svc, err := New(cfg, sessions, pkce, refreshLock, cookieManager, token.JWKSSource(nil), prov, nil, nil)
+	if err != nil {
+		t.Fatalf("service.New: %v", err)
+	}
+
+	cookieVal, err := cookieManager.Encode(sessID)
+	if err != nil {
+		t.Fatalf("cookie.Encode: %v", err)
+	}
+
+	accessToken, _, _, setCookieValue, err := svc.Resolve(ctx, cookieVal)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if accessToken != "access-2" {
+		t.Fatalf("access token = %q, want access-2", accessToken)
+	}
+	if setCookieValue == "" {
+		t.Fatal("expected setCookieValue after resolve")
+	}
+	if prov.refreshCalls != 1 {
+		t.Fatalf("expected 1 refresh call, got %d", prov.refreshCalls)
+	}
+}
+
 func TestService_NewWithRuntimeStoreProvider_RejectsNilStores(t *testing.T) {
 	cfg := newTestConfig(t)
 	cookieManager := cookie.NewSignedManager(cfg.CookieSigningSecret)
