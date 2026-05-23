@@ -431,6 +431,74 @@ func (s *Service) Refresh(ctx context.Context, req auth.RefreshRequest) (*auth.R
 	}, nil
 }
 
+// EnsureFreshSessionByID loads a session and refreshes its OIDC tokens when the
+// configured early-refresh window says they are close to expiry.
+func (s *Service) EnsureFreshSessionByID(ctx context.Context, sessionID string) (*pkgsession.Session, bool, error) {
+	if sessionID == "" {
+		return nil, false, fmt.Errorf("session id required")
+	}
+	sess, err := s.sessions.Get(ctx, sessionID)
+	if err != nil || sess == nil {
+		return nil, false, fmt.Errorf("session not found")
+	}
+	if sess.RefreshToken == "" || !sess.NeedsRefresh(time.Now(), s.cfg.SessionRefreshEarlySeconds) {
+		return sess, false, nil
+	}
+	ok, err := s.refreshLock.Obtain(ctx, sessionID, s.cfg.SessionRefreshLockTTLSeconds)
+	if err != nil {
+		return nil, false, fmt.Errorf("refresh lock obtain failed: %w", err)
+	}
+	if !ok {
+		sess, err = s.sessions.Get(ctx, sessionID)
+		if err != nil || sess == nil {
+			return nil, false, fmt.Errorf("session not found")
+		}
+		return sess, false, nil
+	}
+	defer func() { _ = s.refreshLock.Release(ctx, sessionID) }()
+
+	sess, err = s.sessions.Get(ctx, sessionID)
+	if err != nil || sess == nil {
+		return nil, false, fmt.Errorf("session not found")
+	}
+	if sess.RefreshToken == "" || !sess.NeedsRefresh(time.Now(), s.cfg.SessionRefreshEarlySeconds) {
+		return sess, false, nil
+	}
+
+	tr, err := s.provider.Refresh(ctx, sess.RefreshToken)
+	if err != nil {
+		s.logger.Printf("audit: refresh_failed session_id=%s reason=%v", sessionID, err)
+		return nil, false, fmt.Errorf("refresh failed: %w", err)
+	}
+	expiresAt := time.Now().Unix() + int64(tr.ExpiresIn)
+	if tr.ExpiresIn <= 0 {
+		s.logger.Printf("warn: IdP omitted expires_in on refresh for session_id=%s, defaulting to 1 hour", sessionID)
+		expiresAt = time.Now().Add(1 * time.Hour).Unix()
+	}
+	sess.AccessToken = tr.AccessToken
+	sess.ExpiresAt = expiresAt
+	if tr.RefreshToken != "" {
+		s.logger.Printf("audit: refresh_token_rotated session_id=%s", sessionID)
+		sess.RefreshToken = tr.RefreshToken
+	}
+	if tr.IDToken != "" {
+		sess.IDToken = tr.IDToken
+		aud := s.cfg.OIDCAudience
+		if aud == "" {
+			aud = s.cfg.OIDCClientID
+		}
+		principal, err := token.ValidateIDToken(ctx, tr.IDToken, s.jwks, s.cfg.OIDCIssuer, aud, "")
+		if err == nil && principal.Claims != nil {
+			sess.Claims = principal.Claims
+		}
+	}
+	if err := s.sessions.Set(ctx, sessionID, sess, s.cfg.SessionTTLSeconds); err != nil {
+		return nil, false, err
+	}
+	s.logger.Printf("audit: refresh_success session_id=%s", sessionID)
+	return sess, true, nil
+}
+
 // Logout implements auth.Service.
 func (s *Service) Logout(ctx context.Context, req auth.LogoutRequest) (*auth.LogoutResponse, error) {
 	ctx, span := s.tracer.StartSpan(ctx, "auth.logout")
@@ -510,9 +578,9 @@ func (s *Service) Resolve(ctx context.Context, sessionCookie string) (accessToke
 	if err := s.cookie.Decode(sessionCookie, &sessionID); err != nil {
 		return "", nil, nil, "", fmt.Errorf("invalid cookie")
 	}
-	sess, err := s.sessions.Get(ctx, sessionID)
-	if err != nil || sess == nil {
-		return "", nil, nil, "", fmt.Errorf("session not found")
+	sess, refreshed, err := s.EnsureFreshSessionByID(ctx, sessionID)
+	if err != nil {
+		return "", nil, nil, "", err
 	}
 	claims = sess.Claims
 	if claims == nil {
@@ -528,7 +596,14 @@ func (s *Service) Resolve(ctx context.Context, sessionCookie string) (accessToke
 			"timezone":    sess.TenantContext.Timezone,
 		}
 	}
-	return sess.AccessToken, claims, tc, "", nil
+	cookieValue := ""
+	if refreshed {
+		cookieValue, err = s.cookie.Encode(sessionID)
+		if err != nil {
+			return "", nil, nil, "", err
+		}
+	}
+	return sess.AccessToken, claims, tc, cookieValue, nil
 }
 
 // AttachTenantContext updates the session's tenant_context (Option A enrichment).

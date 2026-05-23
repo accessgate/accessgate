@@ -469,6 +469,10 @@ func (s *Server) handleTokenHandoffUser(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "lookup.subject and lookup.email required", http.StatusBadRequest)
 		return
 	}
+	if body.TokenUse != "" && body.TokenUse != "peoplespace_user_api" {
+		http.Error(w, "unsupported token_use", http.StatusBadRequest)
+		return
+	}
 	sess, err := lookup.FindSessionBySubjectEmail(r.Context(), body.Lookup.Subject, body.Lookup.Email)
 	if err != nil {
 		http.Error(w, "session lookup failed", http.StatusInternalServerError)
@@ -479,6 +483,16 @@ func (s *Server) handleTokenHandoffUser(w http.ResponseWriter, r *http.Request) 
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = w.Write([]byte(`{"error":"no_active_delegated_token"}`))
 		return
+	}
+	if svc, ok := s.svc.(*service.Service); ok && sess.ID != "" {
+		refreshed, _, err := svc.EnsureFreshSessionByID(r.Context(), sess.ID)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte("{\"error\":\"unauthorized\"}"))
+			return
+		}
+		sess = refreshed
 	}
 	resp := map[string]any{
 		"access_token":      sess.AccessToken,
