@@ -3,7 +3,7 @@ module github.com/ArmanAvanesyan/accessgate
 go 1.26.4
 
 require (
-	github.com/ArmanAvanesyan/go-config v0.0.10
+	github.com/ArmanAvanesyan/go-config v0.0.13
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/open-policy-agent/opa v1.14.1
 	github.com/prometheus/client_golang v1.23.2
