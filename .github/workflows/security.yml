@@ -46,13 +46,9 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      # Advisory (non-blocking) for now: the initial scan surfaces pre-existing
-      # standard-library vulnerabilities tied to the pinned Go toolchain in go.mod
-      # plus an OTEL dependency (tracked for remediation). The findings still
-      # appear in this step's log; remove continue-on-error to enforce once the
-      # toolchain and dependencies are bumped.
-      - name: Run govulncheck (advisory)
-        continue-on-error: true
+      # Blocking: the toolchain (go 1.26.4) and OTEL dependency have been bumped
+      # so the scan is clean. A new finding should fail the build.
+      - name: Run govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   codeql:
