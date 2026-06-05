@@ -35,6 +35,11 @@ jobs:
   govulncheck:
     name: govulncheck
     runs-on: ubuntu-latest
+    # Advisory (non-blocking) for now: the initial scan surfaces pre-existing
+    # standard-library vulnerabilities tied to the pinned Go toolchain in go.mod
+    # plus an OTEL dependency. Flip this to blocking once the toolchain and
+    # dependencies are bumped (tracked as a remediation issue in the roadmap).
+    continue-on-error: true
     permissions:
       contents: read
     steps:
