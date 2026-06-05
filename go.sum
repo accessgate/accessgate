@@ -1,5 +1,5 @@
-github.com/ArmanAvanesyan/go-config v0.0.10 h1:N65NEUKO8Qo6hiu9tRd4jY/CnWOnPi00a0xHIDmoyQI=
-github.com/ArmanAvanesyan/go-config v0.0.10/go.mod h1:mbs8tlFUIUfxPA2XpVw3+IO7yw7Qx6QZnKKQI65rJHY=
+github.com/ArmanAvanesyan/go-config v0.0.13 h1:CWkqppw4M6s9cuac5tmNFmD3knbfBEvoCSFQEI4+v2k=
+github.com/ArmanAvanesyan/go-config v0.0.13/go.mod h1:mbs8tlFUIUfxPA2XpVw3+IO7yw7Qx6QZnKKQI65rJHY=
 github.com/agnivade/levenshtein v1.2.1 h1:EHBY3UOn1gwdy/VbFwgo4cxecRznFk7fKWN1KOX7eoM=
 github.com/agnivade/levenshtein v1.2.1/go.mod h1:QVVI16kDrtSuwcpd0p1+xMC6Z/VfhtCyDIjcwga4/DU=
 github.com/andreyvit/diff v0.0.0-20170406064948-c7f18ee00883 h1:bvNMNQO63//z+xNgfBlViaCIJKLlCJ6/fmUseuG0wVQ=
