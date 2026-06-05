@@ -22,7 +22,7 @@ Status legend: ✅ done · 🚧 in progress · ⬜ planned
 ## Now (current cycle)
 
 - ✅ Consolidate org: archive AuthSentinel (canonical `accessgate/authsentinel`) and PolicyFront ecosystem repos; reconcile `LINEAGE.md` / `REPO-MAP.md`.
-- 🚧 Land in-flight runtime work and the module rename → `github.com/accessgate/accessgate` *(PR: commit-wip-runtime)*.
+- ⬜ **Rename the Go module** `github.com/ArmanAvanesyan/accessgate` → `github.com/accessgate/accessgate` to match the repository. *(area/core-runtime)*
 - 🚧 Repo hygiene: ignore scratch/tooling artifacts *(PR: repo-hygiene)*.
 - 🚧 Add `pkg/token` unit tests (auth-critical; was 0% file coverage).
 - 🚧 Add CI security scanning (`govulncheck` + CodeQL) and Dependabot.
