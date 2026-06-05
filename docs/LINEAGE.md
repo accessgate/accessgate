@@ -10,8 +10,14 @@ AccessGate is the current canonical product identity and core runtime.
 
 ## Current interpretation
 - `accessgate/accessgate` = canonical core runtime
-- `ArmanAvanesyan/authsentinel` = legacy predecessor monorepo
-- `policyfront/*` = externalized ecosystem repos from the earlier naming phase
+- `accessgate/authsentinel` = **canonical legacy home** (archived, read-only) for the AuthSentinel ancestor
+- `policyfront/*` = externalized ecosystem repos from the earlier naming phase (all archived, read-only)
+
+## Repository status (reconciled 2026-06-05)
+- `accessgate/authsentinel` — **archived**, designated canonical legacy ancestor.
+- `ArmanAvanesyan/authsentinel` — **archived duplicate** of the above; do not use.
+- `policyfront/*` (18 repos) — **archived**; frozen ecosystem history.
+- Full reconciliation: [`audit/AUDIT-2026-06-05.md`](audit/AUDIT-2026-06-05.md).
 
 ## Practical rule
 When there is naming or ownership ambiguity:
