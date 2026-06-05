@@ -25,3 +25,21 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Local tooling / agent working dirs
+.aok/
+.codex/
+.cursor/
+.go-test-tmp/
+
+# Scratch artifacts from agent/automation runs (do not commit)
+.tmp_*
+*.b64
+*-tree.json
+issue*.txt
+issue*.graphql
+issue*.log
+items.json
+project-items.json
+patch*.json
+naming-drift-scan.txt
+
