@@ -9,9 +9,10 @@
   - shared runtime packages
 
 ## Legacy
-- `ArmanAvanesyan/authsentinel`
+- `accessgate/authsentinel` (**canonical legacy home — archived/read-only**)
   - legacy monorepo predecessor
   - source of migration ideas, old architecture context, and backlog mining
+  - `ArmanAvanesyan/authsentinel` is an **archived duplicate** of this repo; do not use it
   - remaining high-value runtime/config/plugin/helper slices were already rehomed through the first consolidation wave
   - remaining policy-bundle and Flutter SDK residue is documented in [RESIDUAL-SURFACES.md](./RESIDUAL-SURFACES.md)
 
