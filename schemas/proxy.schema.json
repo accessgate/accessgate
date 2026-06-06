@@ -71,6 +71,12 @@
     "plugins_manifest_dir": {
       "type": "string"
     },
+    "plugins_manifest_public_key_path": {
+      "type": "string"
+    },
+    "plugins_manifest_strict": {
+      "type": "boolean"
+    },
     "policy_bundle_path": {
       "type": "string"
     },
@@ -102,6 +108,8 @@
     "policy_fallback_allow",
     "pipeline_plugins",
     "plugins_manifest_dir",
+    "plugins_manifest_strict",
+    "plugins_manifest_public_key_path",
     "admin_secret",
     "bundle_public_key_path",
     "allow_private_upstreams",

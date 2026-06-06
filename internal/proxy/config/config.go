@@ -67,6 +67,16 @@ type Config struct {
 	PipelinePlugins []PipelinePluginEntry `json:"pipeline_plugins"`
 	// PluginsManifestDir optional directory to discover plugin manifests (JSON). Empty disables filesystem discovery.
 	PluginsManifestDir string `json:"plugins_manifest_dir"`
+	// PluginsManifestStrict controls how manifest discovery and dependency-graph errors are
+	// handled at startup. When true, any discovery or dependency-graph error fails startup
+	// (fail-closed). When false (default, for backward compatibility) such errors are logged
+	// clearly but do not abort startup.
+	PluginsManifestStrict bool `json:"plugins_manifest_strict"`
+	// PluginsManifestPublicKeyPath is an optional path to a PEM-encoded Ed25519 public key
+	// used to verify plugin manifest signatures. When set, every discovered manifest must
+	// carry a valid Ed25519 signature or discovery fails (fail-closed). When empty, manifest
+	// signatures are not verified.
+	PluginsManifestPublicKeyPath string `json:"plugins_manifest_public_key_path"`
 
 	// AdminSecret if set guards /admin; requests must include header X-Admin-Secret: <value>. Empty disables admin endpoint.
 	AdminSecret string `json:"admin_secret"`

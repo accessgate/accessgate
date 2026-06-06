@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Manifest describes a plugin instance discovered from the filesystem.
@@ -74,6 +75,9 @@ func discoverSingle(ctx context.Context, reg *Registry, path string, verifier Ve
 	if err := json.Unmarshal(data, &m); err != nil {
 		return fmt.Errorf("unmarshal manifest %s: %w", path, err)
 	}
+	if err := validateManifest(path, &m); err != nil {
+		return err
+	}
 	if verifier != nil {
 		if err := verifier.Verify(path, &m); err != nil {
 			return fmt.Errorf("verify manifest %s: %w", path, err)
@@ -101,11 +105,52 @@ func discoverSingle(ctx context.Context, reg *Registry, path string, verifier Ve
 	return nil
 }
 
-func toDescriptor(m *Manifest) (PluginDescriptor, error) {
-	kind := PluginKind(m.Kind)
+// knownKind reports whether kind is a recognized plugin kind.
+func knownKind(kind PluginKind) bool {
 	switch kind {
 	case PluginKindPipeline, PluginKindProvider, PluginKindIntegration:
+		return true
 	default:
+		return false
+	}
+}
+
+// validateManifest enforces structural requirements on a discovered manifest before it is
+// registered: required fields (id, kind, capabilities), a known kind, and well-formed
+// capability/depends_on entries. Errors include the manifest path and id for actionability.
+// Cross-manifest dependency resolution (depends_on -> a capability provider) is enforced
+// later by Registry.BuildDependencyGraph; here we only validate that the references are
+// syntactically present and non-empty.
+func validateManifest(path string, m *Manifest) error {
+	if strings.TrimSpace(m.ID) == "" {
+		return fmt.Errorf("plugin: manifest %s: missing required field %q", path, "id")
+	}
+	if strings.TrimSpace(m.Kind) == "" {
+		return fmt.Errorf("plugin: manifest %s (id=%q): missing required field %q", path, m.ID, "kind")
+	}
+	if !knownKind(PluginKind(m.Kind)) {
+		return fmt.Errorf("plugin: manifest %s (id=%q): unknown kind %q (want one of %q, %q, %q)",
+			path, m.ID, m.Kind, PluginKindPipeline, PluginKindProvider, PluginKindIntegration)
+	}
+	if len(m.Capabilities) == 0 {
+		return fmt.Errorf("plugin: manifest %s (id=%q): missing required field %q", path, m.ID, "capabilities")
+	}
+	for i, c := range m.Capabilities {
+		if strings.TrimSpace(c) == "" {
+			return fmt.Errorf("plugin: manifest %s (id=%q): empty capability at index %d", path, m.ID, i)
+		}
+	}
+	for i, d := range m.DependsOn {
+		if strings.TrimSpace(d) == "" {
+			return fmt.Errorf("plugin: manifest %s (id=%q): empty depends_on entry at index %d", path, m.ID, i)
+		}
+	}
+	return nil
+}
+
+func toDescriptor(m *Manifest) (PluginDescriptor, error) {
+	kind := PluginKind(m.Kind)
+	if !knownKind(kind) {
 		return PluginDescriptor{}, fmt.Errorf("unknown plugin kind %q", m.Kind)
 	}
 	caps := make([]Capability, len(m.Capabilities))

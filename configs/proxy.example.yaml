@@ -13,6 +13,8 @@ policy_bundle_path: ""
 policy_fallback_allow: true
 pipeline_plugins: []
 plugins_manifest_dir: ""
+plugins_manifest_strict: false  # when true, manifest discovery errors fail startup (fail-closed)
+plugins_manifest_public_key_path: ""  # PEM public key for manifest signature verification
 admin_secret: ""  # set via ADMIN_SECRET env var; empty disables /admin
 bundle_public_key_path: ""  # PEM public key for policy bundle signature verification
 allow_private_upstreams: false  # never enable in production; local dev only

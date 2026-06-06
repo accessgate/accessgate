@@ -144,6 +144,8 @@ when the value is empty/zero.
 | ----------------------- | ----------------------- | -------- | ------- | ----------- |
 | `pipeline_plugins`      | array of plugin entries | no       | —       | Pipeline plugin configs enabled at startup. Each entry has `id` (string), `type` (string), and `raw` (object: plugin-specific config). |
 | `plugins_manifest_dir`  | string                  | no       | —       | Directory to discover plugin manifests (JSON). Empty disables filesystem discovery. |
+| `plugins_manifest_strict` | bool                  | no       | `false` | When `true`, any manifest discovery or dependency-graph error fails startup (fail-closed). When `false`, such errors are logged clearly and startup proceeds. See [GUIDE-PLUGIN-AUTHORING.md](./GUIDE-PLUGIN-AUTHORING.md). |
+| `plugins_manifest_public_key_path` | string       | no       | —       | Path to a PEM-encoded Ed25519 public key used to verify plugin manifest signatures. When set, every manifest must carry a valid signature (fail-closed). When empty, manifest signatures are not verified. |
 
 ### Security
 
