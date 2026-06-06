@@ -64,7 +64,7 @@ func dialAndInvoke(t *testing.T, addr, fullMethod string) codes.Code {
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	var out []byte
 	err = conn.Invoke(ctx, fullMethod, []byte{}, &out, grpc.ForceCodec(rawCodec{}))
