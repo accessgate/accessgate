@@ -184,6 +184,11 @@ jobs:
       contents: write
       # Required to push container images to GHCR (ghcr.io/accessgate/*).
       packages: write
+      # Keyless cosign signing (Sigstore/Fulcio) requests an OIDC token from the
+      # runner; id-token: write authorizes minting it (#45).
+      id-token: write
+      # SLSA build provenance attestations are written to the attestation store.
+      attestations: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -223,6 +228,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Supply-chain hardening (#45). cosign performs keyless signing of the
+      # checksums file and the pushed images (GoReleaser signs:/docker_signs:);
+      # syft generates the per-archive SPDX SBOMs (GoReleaser sboms:). Both must
+      # be on PATH before GoReleaser runs.
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Install syft (SBOM generator)
+        uses: anchore/sbom-action/download-syft@v0
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
@@ -230,3 +245,46 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # SLSA build provenance (#45). GoReleaser has already published the
+      # release and pushed the images; attest the built binaries (dist/) and the
+      # pushed image manifests so consumers can verify with `gh attestation
+      # verify` / `cosign verify-attestation`.
+      - name: Attest build provenance for release binaries
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "dist/**/accessgate-*"
+
+      # Resolve the published multi-arch manifest digests from GHCR so we can
+      # attest provenance against an immutable digest (not a moving tag). The
+      # version tag is the leading-`v`-stripped ref name (GoReleaser's .Version).
+      - name: Resolve pushed image digests
+        id: image_digests
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          # buildx imagetools (already set up + GHCR-authenticated) reports the
+          # multi-arch manifest digest for each published version tag.
+          auth_digest="$(docker buildx imagetools inspect \
+            "ghcr.io/accessgate/accessgate-auth:${version}" \
+            --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          proxy_digest="$(docker buildx imagetools inspect \
+            "ghcr.io/accessgate/accessgate-proxy:${version}" \
+            --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          echo "auth_digest=${auth_digest}" >> "$GITHUB_OUTPUT"
+          echo "proxy_digest=${proxy_digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Attest build provenance for accessgate-auth image
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/accessgate/accessgate-auth
+          subject-digest: ${{ steps.image_digests.outputs.auth_digest }}
+          push-to-registry: true
+        if: ${{ steps.image_digests.outputs.auth_digest != '' }}
+
+      - name: Attest build provenance for accessgate-proxy image
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/accessgate/accessgate-proxy
+          subject-digest: ${{ steps.image_digests.outputs.proxy_digest }}
+          push-to-registry: true
+        if: ${{ steps.image_digests.outputs.proxy_digest != '' }}
