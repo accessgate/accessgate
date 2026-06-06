@@ -23,6 +23,62 @@ AccessGate helps teams centralize auth enforcement at the edge while keeping app
 
 ---
 
+## Quickstart
+
+Bring up a complete AccessGate stack locally with Docker Compose and watch a real
+**allow (200) / deny (403)** decision flow through the proxy — no external IdP and
+no cloud account, in about five minutes.
+
+The stack is `accessgate-proxy` + `accessgate-auth` + an in-repo mock OIDC issuer
+(`mockidp`) + Redis + a sample [httpbin] upstream, defined in
+[`deployments/docker/`](deployments/docker/). Images are built from the committed
+multi-stage Dockerfiles in [`build/docker/`](build/docker/) (distroless, non-root).
+
+```bash
+git clone https://github.com/accessgate/accessgate.git
+cd accessgate/deployments/docker
+cp .env.example .env          # the only required value is COOKIE_SIGNING_SECRET
+docker compose up -d --build  # first build compiles the Go services (~1–2 min)
+```
+
+Once the services report `(healthy)` (`docker compose ps`), exercise the sample
+policy, which **allows `GET /anything/allow`** and **denies everything else**
+(deny-by-default):
+
+```bash
+# ALLOW → 200, proxied to the upstream
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8081/anything/allow
+# 200
+
+# DENY → 403, short-circuited by the policy (never reaches the upstream)
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8081/anything/deny
+# 403
+```
+
+Tear it down with `docker compose down` (add `-v` to drop the ephemeral Redis data).
+
+For the full walkthrough — editing the policy, requiring authentication, logging in
+through the mock IdP, and configuration notes — see the
+[Docker quickstart guide](deployments/docker/README.md). `make e2e-docker` runs the
+same stack end-to-end as a smoke test.
+
+### Published images
+
+Tagged releases (`v*`) publish multi-arch (`linux/amd64`, `linux/arm64`) images to
+the GitHub Container Registry, so you can run AccessGate without building from source:
+
+```bash
+docker pull ghcr.io/accessgate/accessgate-proxy:<tag>
+docker pull ghcr.io/accessgate/accessgate-auth:<tag>
+```
+
+See [docs/RELEASING.md](docs/RELEASING.md) for image names, tags, and the publish
+flow.
+
+[httpbin]: https://httpbin.org/
+
+---
+
 ## Repository structure
 
 This repository contains the core runtime and shared contracts:
@@ -34,11 +90,17 @@ This repository contains the core runtime and shared contracts:
 - `test/` — contract, integration, and e2e-oriented tests
 - `.github/workflows/` — CI/release workflows
 
-Related ecosystem repositories may include Helm charts, Docker image builds, gateway plugins, and language SDKs (see your organization’s documentation).
+First-party container images and the local Docker Compose stack live in this repo
+(`build/docker/`, `deployments/docker/`). Related ecosystem repositories may include
+Helm charts, gateway plugins, and language SDKs (see your organization’s documentation).
 
 ---
 
-## Quick start
+## Build from source
+
+The [Quickstart](#quickstart) above is the fastest path to a running stack. Build
+from source when you want to develop against the runtime or run the binaries
+directly.
 
 ### Prerequisites
 
@@ -102,7 +164,9 @@ Use the CI workflow as the source of truth for required checks before merge.
 
 ## Release
 
-- Binary release metadata is defined in `.goreleaser.yaml` (artifacts `accessgate-auth`, `accessgate-proxy`)
+- Release metadata is defined in `.goreleaser.yaml`: OS/arch binary archives
+  (`accessgate-auth`, `accessgate-proxy`) plus multi-arch container images
+  published to GHCR on `v*` tags. See [docs/RELEASING.md](docs/RELEASING.md).
 
 ---
 

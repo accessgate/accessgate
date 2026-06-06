@@ -5,11 +5,12 @@
 This document is the source of truth for the release process. It describes the
 flow that exists today: you push an annotated `v*` git tag, CI runs the test and
 lint jobs, and [GoReleaser](https://goreleaser.com/) builds the
-`accessgate-auth` and `accessgate-proxy` binaries, archives them, and publishes
-them to GitHub Releases.
+`accessgate-auth` and `accessgate-proxy` binaries, archives them, publishes them
+to GitHub Releases, and builds and pushes multi-arch container images to the
+GitHub Container Registry (GHCR).
 
 It documents only what the repository actually does. Anything not yet
-implemented (changelog automation, signing, container images) lives under
+implemented (changelog automation, image signing / SBOM / provenance) lives under
 [Future improvements](#future-improvements) and links to the
 [roadmap](ROADMAP.md) rather than promising a date.
 
@@ -110,16 +111,24 @@ The `CI` workflow (`.github/workflows/ci.yaml`) runs on the tag push. Its jobs:
    `golangci-lint`).
 2. **Release** runs only `if github.event_name == 'push'` and the ref starts with
    `refs/tags/v`, and only **after** Test and Lint succeed (`needs: [test, lint]`).
-   It elevates `contents: write`, checks out the tagged ref, sets up Go,
-   regenerates protobuf code (`make proto-generate`), builds, runs
-   `go test ./... -short`, and then runs GoReleaser:
+   It elevates `contents: write` **and `packages: write`** (the latter is required
+   to push images to GHCR), checks out the tagged ref, sets up Go, regenerates
+   protobuf code (`make proto-generate`), builds, and runs `go test ./... -short`.
+   It then sets up **QEMU** and **Docker Buildx** (needed for cross-arch image
+   builds) and logs in to **`ghcr.io`** with the workflow's `GITHUB_TOKEN`, before
+   running GoReleaser:
 
    ```
    goreleaser release --clean
    ```
 
-   GoReleaser authenticates to GitHub with the workflow's automatic
-   `GITHUB_TOKEN` (no extra secret to configure).
+   GoReleaser authenticates to GitHub Releases with the same automatic
+   `GITHUB_TOKEN` (no extra secret to configure), and uses the GHCR login above to
+   push the container images and manifests.
+
+   A separate **Docker build (PR validation)** job builds both images
+   single-arch (`linux/amd64`) without pushing on every pull request, so the
+   checked-in Dockerfiles are exercised before they reach a release.
 
 If Test or Lint fails, the Release job does not run and nothing is published —
 delete the tag, fix the problem, and re-tag.
@@ -177,9 +186,52 @@ All of the above are uploaded as assets on the GitHub Release for the tag. The
 builds (`goreleaser release --snapshot`); it is not used by the tag-driven
 release.
 
-> **Not produced today:** container images. The comment in `.goreleaser.yaml`
-> ("Docker images via separate workflow") is aspirational — no such workflow
-> exists in this repo yet. See [Future improvements](#future-improvements).
+---
+
+## Container images
+
+On a `v*` tag, the same GoReleaser run that builds the archives also builds and
+pushes **multi-arch container images** to the GitHub Container Registry. This is
+configured in `.goreleaser.yaml` (`dockers:` + `docker_manifests:`) and implemented
+per [ADR-0005](adr/0005-container-image-tooling.md): images are built from the
+checked-in multi-stage Dockerfiles in `build/docker/` (a `golang:1.26.x` builder
+stage compiling a static binary onto `gcr.io/distroless/static:nonroot` — non-root,
+no shell).
+
+**Images** (one per binary):
+
+| Image                                   | Built from                  |
+| --------------------------------------- | --------------------------- |
+| `ghcr.io/accessgate/accessgate-auth`    | `build/docker/Dockerfile.auth`  |
+| `ghcr.io/accessgate/accessgate-proxy`   | `build/docker/Dockerfile.proxy` |
+
+**Architectures:** `linux/amd64` and `linux/arm64`. Each arch is built as a
+per-arch image (`:{Version}-amd64`, `:{Version}-arm64`) and the two are joined into
+a single multi-arch manifest via `docker_manifests:`.
+
+**Tags** published per release, for each image:
+
+| Tag           | Example                                          | Notes                                  |
+| ------------- | ------------------------------------------------ | -------------------------------------- |
+| `{Version}`   | `ghcr.io/accessgate/accessgate-proxy:0.4.2`      | The release version (no leading `v`).  |
+| `latest`      | `ghcr.io/accessgate/accessgate-proxy:latest`     | Moving tag, updated each release.       |
+
+> The per-arch `:{Version}-amd64` / `:{Version}-arm64` tags are build
+> intermediates that back the manifests; consume the version or `latest` tag.
+
+Pull an image with:
+
+```bash
+docker pull ghcr.io/accessgate/accessgate-proxy:0.4.2
+```
+
+CI requirements for the image build live in the `release` job
+(`.github/workflows/ci.yaml`): QEMU + Docker Buildx for cross-arch builds, a
+`ghcr.io` login, and `packages: write` permission (see [What CI does](#what-ci-does)).
+
+> **Not yet:** image **signing, SBOM, and build provenance**. Images are published
+> unsigned and without an SBOM today; this is explicitly deferred and tracked in
+> issue #45 (see [Future improvements](#future-improvements)).
 
 ---
 
@@ -193,14 +245,13 @@ to scope or dates here.
   hand on the GitHub Release. Conventions for, and automation of, release notes
   are part of the "Release process" item under
   [Next on the roadmap](ROADMAP.md#next) (`area/packaging`).
-- **Artifact signing and SLSA provenance.** Releases are not signed and do not
-  carry build provenance today. SBOM generation and build provenance (e.g. SLSA)
-  in the release workflow are tracked under
-  [Later on the roadmap](ROADMAP.md#later) (supply-chain provenance,
-  `area/packaging`), and align with the "Security & supply chain" theme.
-- **Container images.** No image build/publish workflow exists yet. Packaging
-  work, including consolidating how the project is built and distributed, sits
-  within the "Ecosystem & consolidation" theme on the [roadmap](ROADMAP.md#themes).
+- **Artifact and image signing, SBOM, and SLSA provenance.** Neither the binary
+  archives nor the container images are signed today, and no SBOM or build
+  provenance is produced. Signing/SBOM/provenance for the images is tracked in
+  issue #45 (deferred out of scope by [ADR-0005](adr/0005-container-image-tooling.md));
+  supply-chain provenance more broadly sits under
+  [Later on the roadmap](ROADMAP.md#later) (`area/packaging`), aligned with the
+  "Security & supply chain" theme.
 
 When any of these land, update this document so it continues to describe only
 what the repository actually does.
