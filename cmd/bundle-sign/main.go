@@ -53,7 +53,7 @@ func run(args []string, logw *os.File) error {
 		if err := generateKeypair(*privPEM, *pubPEM); err != nil {
 			return err
 		}
-		fmt.Fprintf(logw, "wrote private key %s and public key %s\n", *privPEM, *pubPEM)
+		_, _ = fmt.Fprintf(logw, "wrote private key %s and public key %s\n", *privPEM, *pubPEM)
 		return nil
 	}
 
@@ -67,6 +67,6 @@ func run(args []string, logw *os.File) error {
 	if err := signBundle(*privPEM, *bundle, sigPath); err != nil {
 		return err
 	}
-	fmt.Fprintf(logw, "wrote signature %s\n", sigPath)
+	_, _ = fmt.Fprintf(logw, "wrote signature %s\n", sigPath)
 	return nil
 }

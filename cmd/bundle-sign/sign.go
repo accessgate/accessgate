@@ -40,7 +40,17 @@ func generateKeypair(privPath, pubPath string) error {
 	}
 	pubPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubDER})
 
-	if err := os.WriteFile(privPath, privPEM, 0o600); err != nil {
+	// Write the private key with O_EXCL so an existing key is never silently
+	// overwritten (it may already be signing trusted bundles). Fail loudly instead.
+	f, err := os.OpenFile(privPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return fmt.Errorf("create private key %q (refusing to overwrite): %w", privPath, err)
+	}
+	if _, err := f.Write(privPEM); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("write private key: %w", err)
+	}
+	if err := f.Close(); err != nil {
 		return fmt.Errorf("write private key: %w", err)
 	}
 	if err := os.WriteFile(pubPath, pubPEM, 0o644); err != nil {
