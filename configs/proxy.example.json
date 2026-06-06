@@ -10,6 +10,8 @@
   "policy_fallback_allow": true,
   "pipeline_plugins": [],
   "plugins_manifest_dir": "",
+  "plugins_manifest_strict": false,
+  "plugins_manifest_public_key_path": "",
   "admin_secret": "",
   "bundle_public_key_path": "",
   "allow_private_upstreams": true,
