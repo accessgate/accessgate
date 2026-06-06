@@ -137,6 +137,30 @@ The engine maps `policy.Decision` to the proxy `Response`:
 - When the decision is **allow** and a principal exists, `defaultHeaderBuilder` adds the
   identity headers listed above (overridable via `HeaderBuilder`).
 
+### gRPC adapter and optional gRPC server
+
+AccessGate authorizes gRPC the same way it authorizes HTTP/GraphQL: every request is
+normalized into a single `authz.Request` and run through the shared `authz.Engine`.
+
+- **Normalization.** `internal/authz/normalize.go` derives `GRPCService`/`GRPCMethod` from
+  the gRPC `:path` pseudo-header (`/pkg.Service/Method`) or the `X-Grpc-Service` /
+  `X-Grpc-Method` headers; `internal/grpc.ExtractMethod` performs the same split for the
+  in-process server path. `policy.Input` carries the service/method so policies can match
+  on them directly.
+- **Interceptors.** `internal/grpc` provides `UnaryServerInterceptor` and
+  `StreamServerInterceptor`. Each builds an `authz.Request` (service/method via
+  `ExtractMethod`, headers from `metadata.FromIncomingContext`), calls `Engine.Handle`, and
+  rejects denied calls with a gRPC status — HTTP 401 → `codes.Unauthenticated`, everything
+  else → `codes.PermissionDenied` — before the wrapped handler runs. Engine errors map to
+  `codes.Internal`.
+- **Optional gRPC server.** When `grpc_listen_addr` is set, `accessgate-proxy` starts a
+  `grpc.NewServer` with the authz interceptors installed, sharing the same engine as the
+  HTTP server, with graceful shutdown bounded by the shared 10s deadline. The current build
+  is an **enforcement layer** (terminate-and-authorize): authorized calls fall through to an
+  `UnknownServiceHandler` that returns `codes.Unimplemented` because transparent upstream
+  forwarding is intentionally out of scope for this iteration. See
+  [GUIDE-GRPC.md](./GUIDE-GRPC.md) for the full terminate/forward design note.
+
 ---
 
 ## 3. The Auth Lifecycle
