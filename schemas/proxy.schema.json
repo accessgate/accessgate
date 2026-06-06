@@ -95,6 +95,12 @@
     "policy_fallback_allow": {
       "type": "boolean"
     },
+    "policy_reload_enabled": {
+      "type": "boolean"
+    },
+    "policy_reload_interval": {
+      "type": "string"
+    },
     "proxy_path_prefix": {
       "type": "string"
     },
@@ -118,6 +124,8 @@
     "policy_engine",
     "policy_bundle_path",
     "policy_fallback_allow",
+    "policy_reload_enabled",
+    "policy_reload_interval",
     "pipeline_plugins",
     "plugins_manifest_dir",
     "plugins_manifest_strict",
