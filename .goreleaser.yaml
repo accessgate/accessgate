@@ -28,6 +28,57 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+# Supply-chain hardening (#45): generate SBOMs, keyless-sign the checksums file
+# and the published GHCR images, and (in CI) attach SLSA build provenance. All
+# signing is keyless (Sigstore / Fulcio + Rekor via GitHub OIDC) — there are no
+# private keys to manage or rotate.
+
+# SBOM generation: one SPDX-JSON SBOM per archive, produced by syft and uploaded
+# as release artifacts alongside the archives. GoReleaser invokes the local
+# `syft` binary (installed in the release job).
+sboms:
+  - id: archive-sbom
+    artifacts: archive
+    documents:
+      - "{{ .ArtifactName }}.sbom.json"
+
+# Keyless cosign signature of the checksums file. Signing the checksums file
+# transitively covers every archive (each archive's hash is in checksums.txt),
+# so a single signature anchors the whole release. cosign uploads the signing
+# certificate to Rekor; we publish the detached signature (.sig) and the
+# short-lived certificate (.pem) as release artifacts for offline verification.
+signs:
+  - id: checksum-keyless
+    cmd: cosign
+    artifacts: checksum
+    # signing_args note: ${artifact}/${signature}/${certificate} are expanded by
+    # GoReleaser. --yes accepts the Sigstore TOS non-interactively; the OIDC
+    # token is supplied by the GitHub Actions runner (id-token: write).
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
+    args:
+      - "sign-blob"
+      - "--oidc-provider=github-actions"
+      - "--output-signature=${signature}"
+      - "--output-certificate=${certificate}"
+      - "${artifact}"
+      - "--yes"
+    output: true
+
+# Keyless cosign signature of the published container images. Each image and
+# manifest is signed by digest (cosign resolves ${artifact} to the pushed
+# ref); the signature is stored as an OCI artifact in GHCR next to the image.
+docker_signs:
+  - id: image-keyless
+    cmd: cosign
+    artifacts: all
+    args:
+      - "sign"
+      - "--oidc-provider=github-actions"
+      - "${artifact}@${digest}"
+      - "--yes"
+    output: true
+
 # Container images, one per binary, built per-arch from the multi-stage
 # Dockerfiles and joined into a single multi-arch manifest below.
 #
