@@ -2,7 +2,7 @@
 # Use with CONFIG_PATH or PROXY_CONFIG when using a YAML-capable loader.
 # For JSON loader use configs/proxy.example.json instead.
 
-upstream_url: "https://api.example.com"
+upstream_url: "https://example.com"
 proxy_path_prefix: "/graphql"
 require_auth: true
 auth_url: "https://auth.example.com"
@@ -11,6 +11,11 @@ http_port: "8081"
 policy_engine: "wasm"
 policy_bundle_path: ""
 policy_fallback_allow: true
+pipeline_plugins: []
+plugins_manifest_dir: ""
+admin_secret: ""  # set via ADMIN_SECRET env var; empty disables /admin
+bundle_public_key_path: ""  # PEM public key for policy bundle signature verification
+allow_private_upstreams: false  # never enable in production; local dev only
 headers_user_id_claim: "sub"
 headers_email_claim: "email"
 headers_name_claim: "name"

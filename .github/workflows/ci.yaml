@@ -67,6 +67,26 @@ jobs:
           go mod tidy
           git diff --exit-code
 
+      - name: Verify config schemas are up to date
+        # Regenerate JSON Schemas from the Go config structs and fail if the
+        # committed schemas/ are stale (drift between structs and schemas).
+        run: |
+          make schema
+          git diff --exit-code schemas/
+
+      - name: Validate example configs
+        # Validate each committed example config against its generated schema and
+        # the runtime Load+Validate rules. Required secrets are injected via env
+        # (env overrides file values) since the examples ship with empty secrets.
+        env:
+          OIDC_CLIENT_SECRET: ci-example-oidc-client-secret
+          COOKIE_SIGNING_SECRET: ci-example-cookie-signing-secret
+        run: |
+          make validate-config CONFIG_PATH=configs/auth.example.json BINARY=auth
+          make validate-config CONFIG_PATH=configs/auth.example.yaml BINARY=auth
+          make validate-config CONFIG_PATH=configs/proxy.example.json BINARY=proxy
+          make validate-config CONFIG_PATH=configs/proxy.example.yaml BINARY=proxy
+
       - name: Build
         run: go build ./...
 
