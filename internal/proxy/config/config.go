@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"time"
 )
 
 // FlexibleBool allows configuration values to be provided either as JSON booleans
@@ -42,6 +43,16 @@ const (
 	PolicyEngineWASM PolicyEngine = "wasm"
 	PolicyEngineRego PolicyEngine = "rego"
 )
+
+// MinPolicyReloadInterval is the smallest accepted policy_reload_interval. A floor
+// avoids pathologically tight polling that would hammer the filesystem and starve
+// other work; sub-second mtime resolution on some filesystems also makes very small
+// intervals unreliable.
+const MinPolicyReloadInterval = time.Second
+
+// DefaultPolicyReloadInterval is the default poll period when hot-reload is enabled
+// and no interval is configured.
+const DefaultPolicyReloadInterval = 10 * time.Second
 
 // Config holds configuration for the Proxy app (loaded via go-config from file + env).
 type Config struct {
@@ -84,6 +95,17 @@ type Config struct {
 	// PolicyFallbackAllow configures behavior when no policy is loaded or evaluation fails.
 	// When true fallback is allow; when false fallback is deny with 503.
 	PolicyFallbackAllow *bool `json:"policy_fallback_allow"`
+
+	// PolicyReloadEnabled enables local policy hot-reload: the proxy polls the bundle
+	// file's mtime and reloads it in place (re-verifying the signature, fail-closed)
+	// without a restart. A failed reload (bad compile/signature/read) retains the
+	// last-good policy and never enters a deny-all state. Requires policy_bundle_path
+	// to be set; when false (the default) the bundle is loaded once at startup.
+	PolicyReloadEnabled bool `json:"policy_reload_enabled"`
+	// PolicyReloadInterval is the poll period for hot-reload, as a Go duration string
+	// (e.g. "10s", "1m"). Only consulted when policy_reload_enabled is true. It must be
+	// parseable and at least MinPolicyReloadInterval. Defaults to "10s".
+	PolicyReloadInterval string `json:"policy_reload_interval"`
 
 	// PipelinePlugins lists pipeline plugin configs (id, type, raw config). Used by proxy startup to configure and enable pipeline plugins from the registry.
 	PipelinePlugins []PipelinePluginEntry `json:"pipeline_plugins"`
@@ -229,6 +251,18 @@ func (c *Config) Validate() error {
 	if c.PolicyEngine != "" && c.PolicyEngine != PolicyEngineWASM && c.PolicyEngine != PolicyEngineRego {
 		return configError("POLICY_ENGINE (must be \"wasm\" or \"rego\")")
 	}
+	if c.PolicyReloadInterval != "" {
+		d, err := time.ParseDuration(c.PolicyReloadInterval)
+		if err != nil {
+			return fmt.Errorf("config: policy_reload_interval %q is not a valid duration: %w", c.PolicyReloadInterval, err)
+		}
+		if d < MinPolicyReloadInterval {
+			return fmt.Errorf("config: policy_reload_interval %q is below the minimum of %s", c.PolicyReloadInterval, MinPolicyReloadInterval)
+		}
+	}
+	if c.PolicyReloadEnabled && c.PolicyBundlePath == "" {
+		return fmt.Errorf("config: policy_reload_enabled requires policy_bundle_path to be set")
+	}
 	if !strings.HasPrefix(c.ProxyPathPrefix, "/") {
 		c.ProxyPathPrefix = "/" + c.ProxyPathPrefix
 	}
@@ -259,6 +293,9 @@ func (c *Config) ApplyDefaults() {
 	if c.PolicyEngine == "" {
 		c.PolicyEngine = PolicyEngineWASM
 	}
+	if c.PolicyReloadInterval == "" {
+		c.PolicyReloadInterval = DefaultPolicyReloadInterval.String()
+	}
 	// Default fallback to deny. Require explicit opt-in (policy_fallback_allow: true) to allow unevaluated requests.
 	if c.PolicyFallbackAllow == nil {
 		v := false
@@ -285,6 +322,21 @@ func (c *Config) ApplyDefaults() {
 	if c.HeaderAdminRole == "" {
 		c.HeaderAdminRole = "admin"
 	}
+}
+
+// PolicyReloadIntervalDuration returns the parsed policy_reload_interval. It assumes
+// the value has already passed Validate (and ApplyDefaults has run); if the field is
+// somehow empty or unparseable it falls back to DefaultPolicyReloadInterval so callers
+// never receive a zero duration.
+func (c *Config) PolicyReloadIntervalDuration() time.Duration {
+	if c.PolicyReloadInterval == "" {
+		return DefaultPolicyReloadInterval
+	}
+	d, err := time.ParseDuration(c.PolicyReloadInterval)
+	if err != nil || d < MinPolicyReloadInterval {
+		return DefaultPolicyReloadInterval
+	}
+	return d
 }
 
 // PipelinePluginEntry is a single pipeline plugin config entry (id, type, raw map for go-config / pluginconfig).
