@@ -7,7 +7,7 @@
 package authv1
 
 import (
-	v1 "github.com/ArmanAvanesyan/accessgate/proto/gen/go/accessgate/sdk/v1"
+	v1 "github.com/accessgate/accessgate/proto/gen/go/accessgate/sdk/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -685,7 +685,7 @@ const file_accessgate_auth_v1_auth_proto_rawDesc = "" +
 	"\bCallback\x12#.accessgate.auth.v1.CallbackRequest\x1a$.accessgate.auth.v1.CallbackResponse\x12R\n" +
 	"\aRefresh\x12\".accessgate.auth.v1.RefreshRequest\x1a#.accessgate.auth.v1.RefreshResponse\x12O\n" +
 	"\x06Logout\x12!.accessgate.auth.v1.LogoutRequest\x1a\".accessgate.auth.v1.LogoutResponse\x12p\n" +
-	"\x11IntrospectSession\x12,.accessgate.auth.v1.IntrospectSessionRequest\x1a-.accessgate.auth.v1.IntrospectSessionResponseBMZKgithub.com/ArmanAvanesyan/accessgate/proto/gen/go/accessgate/auth/v1;authv1b\x06proto3"
+	"\x11IntrospectSession\x12,.accessgate.auth.v1.IntrospectSessionRequest\x1a-.accessgate.auth.v1.IntrospectSessionResponseBIZGgithub.com/accessgate/accessgate/proto/gen/go/accessgate/auth/v1;authv1b\x06proto3"
 
 var (
 	file_accessgate_auth_v1_auth_proto_rawDescOnce sync.Once

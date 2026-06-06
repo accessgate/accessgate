@@ -3,7 +3,7 @@ package grpc
 import (
 	"context"
 
-	"github.com/ArmanAvanesyan/accessgate/internal/authz"
+	"github.com/accessgate/accessgate/internal/authz"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

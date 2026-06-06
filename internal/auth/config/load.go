@@ -3,7 +3,7 @@ package config
 import (
 	"context"
 
-	"github.com/ArmanAvanesyan/accessgate/internal/configload"
+	"github.com/accessgate/accessgate/internal/configload"
 )
 
 // Load reads config from optional file plus environment (same pipeline as the accessgate-auth binary),

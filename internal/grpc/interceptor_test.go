@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ArmanAvanesyan/accessgate/internal/authz"
+	"github.com/accessgate/accessgate/internal/authz"
 	gogrpc "google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

@@ -15,15 +15,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ArmanAvanesyan/accessgate/internal/auth/config"
-	"github.com/ArmanAvanesyan/accessgate/internal/plugin"
-	"github.com/ArmanAvanesyan/accessgate/pkg/auth"
-	"github.com/ArmanAvanesyan/accessgate/pkg/cookie"
-	"github.com/ArmanAvanesyan/accessgate/pkg/observability"
-	"github.com/ArmanAvanesyan/accessgate/pkg/oidc"
-	pkgsdk "github.com/ArmanAvanesyan/accessgate/pkg/sdk"
-	pkgsession "github.com/ArmanAvanesyan/accessgate/pkg/session"
-	"github.com/ArmanAvanesyan/accessgate/pkg/token"
+	"github.com/accessgate/accessgate/internal/auth/config"
+	"github.com/accessgate/accessgate/internal/plugin"
+	"github.com/accessgate/accessgate/pkg/auth"
+	"github.com/accessgate/accessgate/pkg/cookie"
+	"github.com/accessgate/accessgate/pkg/observability"
+	"github.com/accessgate/accessgate/pkg/oidc"
+	pkgsdk "github.com/accessgate/accessgate/pkg/sdk"
+	pkgsession "github.com/accessgate/accessgate/pkg/session"
+	"github.com/accessgate/accessgate/pkg/token"
 )
 
 // Service implements auth.Service.

@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ArmanAvanesyan/accessgate/internal/auth/config"
-	"github.com/ArmanAvanesyan/accessgate/internal/auth/service"
-	"github.com/ArmanAvanesyan/accessgate/internal/plugin"
-	"github.com/ArmanAvanesyan/accessgate/pkg/auth"
-	"github.com/ArmanAvanesyan/accessgate/pkg/cookie"
-	pkgsession "github.com/ArmanAvanesyan/accessgate/pkg/session"
+	"github.com/accessgate/accessgate/internal/auth/config"
+	"github.com/accessgate/accessgate/internal/auth/service"
+	"github.com/accessgate/accessgate/internal/plugin"
+	"github.com/accessgate/accessgate/pkg/auth"
+	"github.com/accessgate/accessgate/pkg/cookie"
+	pkgsession "github.com/accessgate/accessgate/pkg/session"
 )
 
 type mockAgentService struct{}

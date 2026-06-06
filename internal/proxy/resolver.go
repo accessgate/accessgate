@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/ArmanAvanesyan/accessgate/internal/authz"
-	"github.com/ArmanAvanesyan/accessgate/pkg/token"
+	"github.com/accessgate/accessgate/internal/authz"
+	"github.com/accessgate/accessgate/pkg/token"
 )
 
 // AuthPrincipalResolver implements authz.PrincipalResolver by calling accessgate-auth resolve.

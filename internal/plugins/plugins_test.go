@@ -10,11 +10,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/ArmanAvanesyan/accessgate/internal/plugin"
-	"github.com/ArmanAvanesyan/accessgate/internal/plugins/caddy"
-	"github.com/ArmanAvanesyan/accessgate/internal/plugins/krakend"
-	"github.com/ArmanAvanesyan/accessgate/internal/plugins/traefik"
-	"github.com/ArmanAvanesyan/accessgate/internal/authz"
+	"github.com/accessgate/accessgate/internal/plugin"
+	"github.com/accessgate/accessgate/internal/plugins/caddy"
+	"github.com/accessgate/accessgate/internal/plugins/krakend"
+	"github.com/accessgate/accessgate/internal/plugins/traefik"
+	"github.com/accessgate/accessgate/internal/authz"
 )
 
 var testIntegrationDescriptor = plugin.PluginDescriptor{

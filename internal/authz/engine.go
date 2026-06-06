@@ -7,9 +7,9 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/ArmanAvanesyan/accessgate/internal/policy"
-	"github.com/ArmanAvanesyan/accessgate/pkg/observability"
-	"github.com/ArmanAvanesyan/accessgate/pkg/token"
+	"github.com/accessgate/accessgate/internal/policy"
+	"github.com/accessgate/accessgate/pkg/observability"
+	"github.com/accessgate/accessgate/pkg/token"
 )
 
 // PrincipalResolver resolves the principal (identity) from a proxy request (e.g. via session cookie or JWT).

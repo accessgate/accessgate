@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ArmanAvanesyan/accessgate/pkg/session"
+	"github.com/accessgate/accessgate/pkg/session"
 )
 
 var (

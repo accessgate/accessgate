@@ -1,4 +1,4 @@
-module github.com/ArmanAvanesyan/accessgate
+module github.com/accessgate/accessgate
 
 go 1.26.4
 

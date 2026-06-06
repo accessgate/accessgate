@@ -2,8 +2,8 @@
 
 > AccessGate is a policy-driven authentication and authorization runtime written in Go.
 > The repository lives at `github.com/accessgate/accessgate`; the Go module path is
-> currently `github.com/ArmanAvanesyan/accessgate` and is planned to be renamed to match
-> the repository (see [`MIGRATION.md`](MIGRATION.md)). It separates **identity lifecycle**
+> `github.com/accessgate/accessgate`, matching the repository
+> (see [`MIGRATION.md`](MIGRATION.md)). It separates **identity lifecycle**
 > from **request-time enforcement** so each can scale, deploy, and fail independently.
 
 This document describes how the system is put together: the two binaries and what they own,

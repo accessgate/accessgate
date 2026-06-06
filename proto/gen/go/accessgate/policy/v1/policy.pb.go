@@ -7,7 +7,7 @@
 package policyv1
 
 import (
-	v1 "github.com/ArmanAvanesyan/accessgate/proto/gen/go/accessgate/sdk/v1"
+	v1 "github.com/accessgate/accessgate/proto/gen/go/accessgate/sdk/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
@@ -478,7 +478,7 @@ const file_accessgate_policy_v1_policy_proto_rawDesc = "" +
 	"\bdecision\x18\x01 \x01(\v2(.accessgate.policy.v1.EvaluationDecisionR\bdecision\x126\n" +
 	"\x05trace\x18\x02 \x03(\v2 .accessgate.policy.v1.TraceEventR\x05trace2j\n" +
 	"\rPolicyService\x12Y\n" +
-	"\bEvaluate\x12%.accessgate.policy.v1.EvaluateRequest\x1a&.accessgate.policy.v1.EvaluateResponseBQZOgithub.com/ArmanAvanesyan/accessgate/proto/gen/go/accessgate/policy/v1;policyv1b\x06proto3"
+	"\bEvaluate\x12%.accessgate.policy.v1.EvaluateRequest\x1a&.accessgate.policy.v1.EvaluateResponseBMZKgithub.com/accessgate/accessgate/proto/gen/go/accessgate/policy/v1;policyv1b\x06proto3"
 
 var (
 	file_accessgate_policy_v1_policy_proto_rawDescOnce sync.Once

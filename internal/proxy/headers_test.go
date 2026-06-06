@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/ArmanAvanesyan/accessgate/internal/proxy/config"
+	"github.com/accessgate/accessgate/internal/proxy/config"
 )
 
 func TestBuildUpstreamHeadersBearerAndClaims(t *testing.T) {

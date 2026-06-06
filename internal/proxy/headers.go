@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ArmanAvanesyan/accessgate/internal/proxy/config"
+	"github.com/accessgate/accessgate/internal/proxy/config"
 )
 
 // BuildUpstreamHeaders builds headers for the BFF from session resolve response and config.

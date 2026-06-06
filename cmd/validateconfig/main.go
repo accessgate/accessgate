@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	authconfig "github.com/ArmanAvanesyan/accessgate/internal/auth/config"
-	proxyconfig "github.com/ArmanAvanesyan/accessgate/internal/proxy/config"
+	authconfig "github.com/accessgate/accessgate/internal/auth/config"
+	proxyconfig "github.com/accessgate/accessgate/internal/proxy/config"
 	"github.com/xeipuuv/gojsonschema"
 	"sigs.k8s.io/yaml"
 )

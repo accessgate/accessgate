@@ -11,12 +11,12 @@ import (
 	"sync"
 	"testing"
 
-	pkgproxy "github.com/ArmanAvanesyan/accessgate/internal/authz"
-	"github.com/ArmanAvanesyan/accessgate/internal/plugins/ratelimit"
-	"github.com/ArmanAvanesyan/accessgate/internal/policy"
-	"github.com/ArmanAvanesyan/accessgate/internal/proxy"
-	"github.com/ArmanAvanesyan/accessgate/internal/proxy/config"
-	"github.com/ArmanAvanesyan/accessgate/internal/proxy/httpserver"
+	pkgproxy "github.com/accessgate/accessgate/internal/authz"
+	"github.com/accessgate/accessgate/internal/plugins/ratelimit"
+	"github.com/accessgate/accessgate/internal/policy"
+	"github.com/accessgate/accessgate/internal/proxy"
+	"github.com/accessgate/accessgate/internal/proxy/config"
+	"github.com/accessgate/accessgate/internal/proxy/httpserver"
 )
 
 func newProxyServer(cfg *config.Config, engine policy.Engine, pipelinePlugins []pkgproxy.PipelinePlugin) *httpserver.Server {

@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"strings"
 
-	pkgproxy "github.com/ArmanAvanesyan/accessgate/internal/authz"
-	"github.com/ArmanAvanesyan/accessgate/internal/policy"
-	"github.com/ArmanAvanesyan/accessgate/internal/plugin"
-	"github.com/ArmanAvanesyan/accessgate/internal/proxy/config"
+	pkgproxy "github.com/accessgate/accessgate/internal/authz"
+	"github.com/accessgate/accessgate/internal/policy"
+	"github.com/accessgate/accessgate/internal/plugin"
+	"github.com/accessgate/accessgate/internal/proxy/config"
 )
 
 // Server is the HTTP server for the Proxy app.

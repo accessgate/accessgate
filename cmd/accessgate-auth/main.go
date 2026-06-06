@@ -11,15 +11,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ArmanAvanesyan/accessgate/internal/auth/config"
-	"github.com/ArmanAvanesyan/accessgate/internal/auth/httpserver"
-	"github.com/ArmanAvanesyan/accessgate/internal/auth/service"
-	"github.com/ArmanAvanesyan/accessgate/internal/plugin"
-	"github.com/ArmanAvanesyan/accessgate/internal/plugins/register"
-	"github.com/ArmanAvanesyan/accessgate/internal/redis"
-	"github.com/ArmanAvanesyan/accessgate/pkg/cookie"
-	"github.com/ArmanAvanesyan/accessgate/pkg/observability"
-	"github.com/ArmanAvanesyan/accessgate/pkg/token"
+	"github.com/accessgate/accessgate/internal/auth/config"
+	"github.com/accessgate/accessgate/internal/auth/httpserver"
+	"github.com/accessgate/accessgate/internal/auth/service"
+	"github.com/accessgate/accessgate/internal/plugin"
+	"github.com/accessgate/accessgate/internal/plugins/register"
+	"github.com/accessgate/accessgate/internal/redis"
+	"github.com/accessgate/accessgate/pkg/cookie"
+	"github.com/accessgate/accessgate/pkg/observability"
+	"github.com/accessgate/accessgate/pkg/token"
 )
 
 func main() {

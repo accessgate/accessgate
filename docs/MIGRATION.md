@@ -26,10 +26,9 @@ changed and how to update.
 ## Migration steps
 
 ### 1. Imports (if you import the Go packages)
-The target module path is `github.com/accessgate/accessgate/...` (matching the
-repository). **Note:** the rename from `github.com/ArmanAvanesyan/accessgate` is
-planned but not yet landed on `main` — until it merges, import from
-`github.com/ArmanAvanesyan/accessgate/...`. Track it in [`ROADMAP.md`](ROADMAP.md).
+The module path is `github.com/accessgate/accessgate/...` (matching the
+repository). The rename from `github.com/ArmanAvanesyan/accessgate` has landed on
+`main`; import from `github.com/accessgate/accessgate/...`.
 
 ### 2. Binaries & deployment
 Replace `policyfront-agent` → `accessgate-auth` and `policyfront-proxy` →

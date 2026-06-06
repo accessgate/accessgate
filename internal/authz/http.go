@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/ArmanAvanesyan/accessgate/pkg/cookie"
+	"github.com/accessgate/accessgate/pkg/cookie"
 )
 
 // blockedCIDRs lists private/loopback/link-local ranges that are forbidden as upstream targets (SSRF).

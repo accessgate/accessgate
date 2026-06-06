@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ArmanAvanesyan/accessgate/pkg/session"
+	"github.com/accessgate/accessgate/pkg/session"
 )
 
 // FlexibleBool allows configuration values to be provided either as JSON booleans

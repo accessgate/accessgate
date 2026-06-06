@@ -3,7 +3,7 @@ package authz
 import (
 	"testing"
 
-	"github.com/ArmanAvanesyan/accessgate/pkg/cookie"
+	"github.com/accessgate/accessgate/pkg/cookie"
 )
 
 func TestResponseFields(t *testing.T) {

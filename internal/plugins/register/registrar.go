@@ -3,9 +3,9 @@ package register
 import (
 	"context"
 
-	"github.com/ArmanAvanesyan/accessgate/internal/plugin"
-	provideroidc "github.com/ArmanAvanesyan/accessgate/internal/plugins/oidcprovider"
-	"github.com/ArmanAvanesyan/accessgate/internal/plugins/ratelimit"
+	"github.com/accessgate/accessgate/internal/plugin"
+	provideroidc "github.com/accessgate/accessgate/internal/plugins/oidcprovider"
+	"github.com/accessgate/accessgate/internal/plugins/ratelimit"
 )
 
 // Registrar registers built-in plugins that are compiled into the binary.

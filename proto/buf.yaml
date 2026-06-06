@@ -7,3 +7,8 @@ lint:
 breaking:
   use:
     - FILE
+  except:
+    # go_package affects only the Go import path of generated code, not the
+    # wire format or protobuf API. Excluded so the one-time module rename
+    # (ArmanAvanesyan/accessgate -> accessgate/accessgate) is not flagged.
+    - FILE_SAME_GO_PACKAGE

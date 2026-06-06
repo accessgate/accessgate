@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ArmanAvanesyan/accessgate/internal/authz"
+	"github.com/accessgate/accessgate/internal/authz"
 )
 
 func TestAuthPrincipalResolver(t *testing.T) {

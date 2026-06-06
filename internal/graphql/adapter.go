@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/ArmanAvanesyan/accessgate/internal/authz"
+	"github.com/accessgate/accessgate/internal/authz"
 )
 
 // NormalizeHTTPRequest converts an HTTP GraphQL request into a authz.Request.

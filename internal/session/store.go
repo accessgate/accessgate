@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/ArmanAvanesyan/accessgate/pkg/cookie"
-	pkgsession "github.com/ArmanAvanesyan/accessgate/pkg/session"
+	"github.com/accessgate/accessgate/pkg/cookie"
+	pkgsession "github.com/accessgate/accessgate/pkg/session"
 )
 
 // BrowserSessionManager coordinates cookie and store operations for browser sessions.
