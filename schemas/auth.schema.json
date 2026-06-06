@@ -1,22 +1,21 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "AccessGate auth (OIDC/session) config",
-  "type": "object",
+  "additionalProperties": false,
   "properties": {
     "admin_secret": {
       "type": "string"
     },
     "allowed_redirect_origins": {
-      "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "type": "array"
     },
     "allowed_redirect_paths": {
-      "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "type": "array"
     },
     "app_base_url": {
       "type": "string"
@@ -37,10 +36,10 @@
       "type": "string"
     },
     "cors_allowed_origins": {
-      "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "type": "array"
     },
     "http_port": {
       "type": "string"
@@ -67,10 +66,10 @@
       "type": "string"
     },
     "oidc_scopes": {
-      "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "type": "array"
     },
     "post_login_webhook_url": {
       "type": "string"
@@ -130,5 +129,6 @@
     "cors_allowed_origins",
     "provider_plugin_id"
   ],
-  "additionalProperties": false
+  "title": "AccessGate auth (OIDC/session) config",
+  "type": "object"
 }

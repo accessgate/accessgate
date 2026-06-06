@@ -1,7 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "AccessGate proxy config",
-  "type": "object",
+  "additionalProperties": false,
   "properties": {
     "admin_secret": {
       "type": "string"
@@ -46,16 +45,15 @@
       "type": "string"
     },
     "pipeline_plugins": {
-      "type": "array",
       "items": {
-        "type": "object",
+        "additionalProperties": false,
         "properties": {
           "id": {
             "type": "string"
           },
           "raw": {
-            "type": "object",
-            "additionalProperties": {}
+            "additionalProperties": {},
+            "type": "object"
           },
           "type": {
             "type": "string"
@@ -66,8 +64,9 @@
           "type",
           "raw"
         ],
-        "additionalProperties": false
-      }
+        "type": "object"
+      },
+      "type": "array"
     },
     "plugins_manifest_dir": {
       "type": "string"
@@ -115,5 +114,6 @@
     "headers_tenant_id_claim",
     "headers_admin_role"
   ],
-  "additionalProperties": false
+  "title": "AccessGate proxy config",
+  "type": "object"
 }
