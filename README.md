@@ -110,7 +110,7 @@ Use the CI workflow as the source of truth for required checks before merge.
 
 If you are upgrading from older **PolicyFront**-named artifacts and telemetry:
 
-- Go module path is `github.com/ArmanAvanesyan/accessgate` (update imports accordingly).
+- Go module path is `github.com/accessgate/accessgate` (update imports accordingly).
 - Binaries are **`accessgate-auth`** and **`accessgate-proxy`** (not `policyfront-agent` / `policyfront-proxy`).
 - Prometheus metric names use the `accessgate_*` prefix (for example `accessgate_auth_decisions_total` replaces `policyfront_auth_decisions_total`). Update dashboards and alerts.
 - Default OpenTelemetry service name when `OTEL_SERVICE_NAME` is unset is **`accessgate`**.
