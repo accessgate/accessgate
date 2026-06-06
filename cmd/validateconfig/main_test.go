@@ -37,6 +37,24 @@ const validAuthConfigJSON = `{
   "provider_plugin_id": ""
 }`
 
+func TestFileURL(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"windows", `C:\a\b.json`, "file:///C:/a/b.json"},
+		{"posix", "/a/b.json", "file:///a/b.json"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := fileURL(tc.in); got != tc.want {
+				t.Fatalf("fileURL(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestNormalizeBinary(t *testing.T) {
 	b, w := normalizeBinary("  AGENT  ")
 	if b != "auth" || w == "" {
