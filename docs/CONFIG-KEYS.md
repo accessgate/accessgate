@@ -63,6 +63,8 @@ the value is empty/zero.
 
 ### Redis / session
 
+> For HA topologies, persistence/eviction, and failover behaviour, see [REDIS-HA.md](./REDIS-HA.md).
+
 | Key                                 | Type   | Required | Default | Description |
 | ----------------------------------- | ------ | -------- | ------- | ----------- |
 | `redis_url`                         | string | **yes**  | —       | Redis connection URL (e.g. `redis://localhost:6379`) for session storage. |
