@@ -1,0 +1,47 @@
+# syntax=docker/dockerfile:1
+#
+# Multi-stage build for the in-repo mock OIDC issuer (cmd/mockidp).
+#
+#   builder: golang:1.26.4 — compiles a static, CGO-free binary.
+#   final:   gcr.io/distroless/static:nonroot — no shell, no package manager,
+#            runs as the non-root "nonroot" user.
+#
+# This image exists purely to make the local docker-compose quickstart stack
+# self-contained: it stands in for a real IdP so a new user does not need to
+# register an external OIDC client. It is NOT a production artifact — the mock
+# signs tokens with an ephemeral in-memory RSA key generated at startup.
+#
+# Follows the same multi-stage / distroless pattern as Dockerfile.auth and
+# Dockerfile.proxy (ADR-0005). Build from the repo root:
+#   docker build -f build/docker/Dockerfile.mockidp .
+
+# --- builder ---------------------------------------------------------------
+FROM --platform=$BUILDPLATFORM golang:1.26.4 AS builder
+
+WORKDIR /src
+
+# Cache module downloads separately from the source for faster rebuilds.
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+ARG TARGETOS
+ARG TARGETARCH
+ENV CGO_ENABLED=0
+RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags="-s -w" \
+    -o /out/mockidp ./cmd/mockidp
+
+# --- final -----------------------------------------------------------------
+FROM gcr.io/distroless/static:nonroot
+
+COPY --from=builder /out/mockidp /usr/local/bin/mockidp
+
+# Non-root by default (distroless "nonroot" user, uid 65532).
+USER nonroot:nonroot
+
+# mockidp default listen port (cmd/mockidp: MOCKIDP_LISTEN_ADDR=:8082).
+EXPOSE 8082
+
+ENTRYPOINT ["/usr/local/bin/mockidp"]
