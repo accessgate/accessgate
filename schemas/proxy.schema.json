@@ -20,6 +20,12 @@
     "grpc_listen_addr": {
       "type": "string"
     },
+    "grpc_upstream_addr": {
+      "type": "string"
+    },
+    "grpc_upstream_insecure": {
+      "type": "boolean"
+    },
     "headers_admin_role": {
       "type": "string"
     },
@@ -107,6 +113,8 @@
     "cookie_name",
     "http_port",
     "grpc_listen_addr",
+    "grpc_upstream_addr",
+    "grpc_upstream_insecure",
     "policy_engine",
     "policy_bundle_path",
     "policy_fallback_allow",

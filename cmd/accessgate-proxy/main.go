@@ -51,15 +51,21 @@ func main() {
 
 	// Optional gRPC server (enabled when grpc_listen_addr is set). It shares the
 	// authz engine with the HTTP server and installs the AccessGate authz
-	// interceptors on every call.
-	grpcSrv := newGRPCServer(engine)
+	// interceptors on every call. When grpc_upstream_addr is set, authorized
+	// calls are transparently forwarded to that upstream; otherwise authorized
+	// calls return codes.Unimplemented.
+	grpcSrv, grpcFwd := newGRPCServer(engine, cfg.GRPCUpstreamAddr, bool(cfg.GRPCUpstreamInsecure))
 	grpcEnabled := cfg.GRPCListenAddr != ""
 	if grpcEnabled {
 		lis, err := startGRPCServer(grpcSrv, cfg.GRPCListenAddr)
 		if err != nil {
 			logger.Fatalf("grpc listen %q: %v", cfg.GRPCListenAddr, err)
 		}
-		logger.Printf("grpc server listening on %s", lis.Addr().String())
+		if cfg.GRPCUpstreamAddr != "" {
+			logger.Printf("grpc server listening on %s, forwarding authorized calls to upstream %s", lis.Addr().String(), cfg.GRPCUpstreamAddr)
+		} else {
+			logger.Printf("grpc server listening on %s (no grpc_upstream_addr; authorized calls return Unimplemented)", lis.Addr().String())
+		}
 	}
 
 	sigCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -92,6 +98,13 @@ func main() {
 		case <-shutdownCtx.Done():
 			logger.Printf("grpc graceful shutdown timed out; forcing stop")
 			grpcSrv.Stop()
+		}
+		// Close the shared upstream connection after the server has stopped
+		// accepting/serving calls.
+		if grpcFwd != nil {
+			if err := grpcFwd.Close(); err != nil {
+				logger.Printf("grpc upstream connection close: %v", err)
+			}
 		}
 	}
 
