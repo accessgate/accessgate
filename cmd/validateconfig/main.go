@@ -153,7 +153,11 @@ func findSchemaPath(binary string) (string, error) {
 // component begins with a single "/", producing `file:///C:/a/b.json`. POSIX
 // paths already start with "/", so they become `file:///abs/path` unchanged.
 func fileURL(absPath string) string {
-	p := filepath.ToSlash(absPath)
+	// Normalize separators explicitly rather than with filepath.ToSlash, which is
+	// OS-dependent (a no-op off Windows) and would leave backslashes in a Windows
+	// path when this code runs on Linux. Unconditional replacement makes the
+	// result identical on every platform.
+	p := strings.ReplaceAll(absPath, "\\", "/")
 	if !strings.HasPrefix(p, "/") {
 		p = "/" + p
 	}
