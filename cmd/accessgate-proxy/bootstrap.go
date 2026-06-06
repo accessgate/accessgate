@@ -73,7 +73,15 @@ func buildPolicyEngine(cfg *config.Config) (policy.Engine, error) {
 		if cfg.PolicyBundlePath == "" {
 			return policy.NewWASMRuntime(fallback), nil
 		}
-		loader := policy.NewBundleLoader(fallback, cfg.BundlePublicKeyPath)
+		var publicKeyPEM string
+		if cfg.BundlePublicKeyPath != "" {
+			pem, err := os.ReadFile(cfg.BundlePublicKeyPath)
+			if err != nil {
+				return nil, fmt.Errorf("read bundle public key %q: %w", cfg.BundlePublicKeyPath, err)
+			}
+			publicKeyPEM = string(pem)
+		}
+		loader := policy.NewBundleLoader(fallback, publicKeyPEM)
 		return loader.LoadBundle(cfg.PolicyBundlePath)
 	case config.PolicyEngineRego:
 		eng := policy.NewRegoEngine(fallback)

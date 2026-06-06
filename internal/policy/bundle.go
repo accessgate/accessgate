@@ -2,6 +2,7 @@ package policy
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -28,11 +29,13 @@ type cachedBundle struct {
 }
 
 // NewBundleLoader creates a loader that caches compiled modules by path and mtime.
-// publicKeyPEM is optional: when non-empty it will be used to verify bundle signatures
-// (not yet implemented — a warning is logged when empty).
+// publicKeyPEM is optional: when non-empty it is used to verify each bundle's detached
+// Ed25519 signature (a "<bundle>.sig" file) before the module is compiled and instantiated.
+// Verification fails closed — see verifyBundleFile. When empty, a warning is logged and
+// bundles are loaded without integrity verification.
 func NewBundleLoader(fallback FallbackConfig, publicKeyPEM string) *BundleLoader {
 	if publicKeyPEM == "" {
-		log.Printf("warn: policy bundle signature verification is disabled; set BUNDLE_PUBLIC_KEY_PATH for integrity checks")
+		log.Printf("warn: policy bundle signature verification is disabled; set bundle_public_key_path for integrity checks")
 	}
 	return &BundleLoader{
 		runtime:      wazero.NewRuntime(context.Background()),
@@ -61,6 +64,18 @@ func (b *BundleLoader) LoadBundle(path string) (Engine, error) {
 		b.mu.Unlock()
 		return b.instantiateEngine(entry.compiled)
 	}
+
+	// Verify the bundle signature before compiling/instantiating. This is fail-closed:
+	// when a public key is configured, a missing or invalid signature aborts the load and
+	// the (unverified) bundle is never compiled. When no key is configured, verification is
+	// skipped (unsigned behavior, preserving prior semantics).
+	if b.publicKeyPEM != "" {
+		if err := verifyBundleFile(b.publicKeyPEM, path, wasm); err != nil {
+			b.mu.Unlock()
+			return nil, fmt.Errorf("policy: bundle %q failed signature verification: %w", path, err)
+		}
+	}
+
 	compiled, err := b.runtime.CompileModule(context.Background(), wasm)
 	if err != nil {
 		b.mu.Unlock()
