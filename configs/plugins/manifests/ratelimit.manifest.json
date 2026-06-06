@@ -1,0 +1,11 @@
+{
+  "id": "pipeline.ratelimit",
+  "kind": "pipeline",
+  "name": "Rate Limit",
+  "description": "Token-bucket rate limiting pipeline plugin.",
+  "version": "1.0.0",
+  "capabilities": ["pipeline:ratelimit"],
+  "depends_on": [],
+  "config_schema_ref": "pipeline/ratelimit",
+  "enabled": true
+}
