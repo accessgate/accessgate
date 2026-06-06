@@ -23,24 +23,25 @@ Status legend: ✅ done · 🚧 in progress · ⬜ planned
 
 - ✅ Consolidate org: archive AuthSentinel (canonical `accessgate/authsentinel`) and PolicyFront ecosystem repos; reconcile `LINEAGE.md` / `REPO-MAP.md`.
 - ✅ **Rename the Go module** `github.com/ArmanAvanesyan/accessgate` → `github.com/accessgate/accessgate` to match the repository. *(area/core-runtime)*
-- 🚧 Repo hygiene: ignore scratch/tooling artifacts *(PR: repo-hygiene)*.
-- 🚧 Add `pkg/token` unit tests (auth-critical; was 0% file coverage).
-- 🚧 Add CI security scanning (`govulncheck` + CodeQL) and Dependabot.
-- 🚧 Core docs: `ARCHITECTURE.md`, `CONTRIBUTING.md`, `SECURITY.md`, `MIGRATION.md`, ADRs 0001–0004.
+- ✅ Repo hygiene: ignore scratch/tooling artifacts.
+- ✅ Add `pkg/token` unit tests (auth-critical; was 0% file coverage).
+- ✅ Add CI security scanning (`govulncheck` + CodeQL) and Dependabot.
+- ✅ Core docs: `ARCHITECTURE.md`, `CONTRIBUTING.md`, `SECURITY.md`, `MIGRATION.md`, ADRs 0001–0004.
 
-## Next
+## Next — completed (2026-06)
 
-- ⬜ **Implement the GraphQL adapter** (`internal/graphql` is currently a stub) — parse operations and feed `GraphQLOperation` into policy input. *(area/proxy)*
-- ⬜ **Implement the gRPC adapter** (`internal/grpc` is currently a stub) — extract service/method + metadata into policy input. *(area/proxy)*
-- ⬜ **CI coverage gate** — enforce a minimum coverage threshold; expand integration coverage for `internal/auth/service` and `internal/proxy`. *(area/test)*
-- ⬜ **Config validation in CI** — run `make validate-config` against the example configs; document every config key and keep schemas in sync. *(area/config)*
-- ⬜ **WASM bundle signing, end-to-end** — document and test signed-bundle loading (`bundle_public_key_path`); add a signing how-to. *(area/policy)*
-- ⬜ **Plugin system hardening** — make manifest discovery and dependency-graph build first-class (currently best-effort), with a plugin author guide. *(area/plugin)*
-- ⬜ **SDK single source of truth** — declare and document the maintained home for each SDK; ensure none are sourced from archived PolicyFront repos. *(area/sdk)*
-- ⬜ **Release process** — document tag → GoReleaser flow; add release notes conventions. *(area/packaging)*
+- ✅ **GraphQL adapter** — operation extraction (raw + JSON) wired into authz. *(area/proxy, PR #70)*
+- ✅ **gRPC adapter + proxy gRPC server** — `ExtractMethod`, authz interceptors, config-gated gRPC listener (terminate-and-authorize; transparent forwarding tracked in #75). *(area/proxy, PR #74)*
+- ✅ **CI coverage gate** — 40% threshold + expanded proxy/auth integration tests. *(PR #72)*
+- ✅ **Config validation in CI** — `make validate-config` on examples + schema-drift check; `docs/CONFIG-KEYS.md`; cross-platform `validateconfig` fix. *(PR #68, #66)*
+- ✅ **WASM bundle signing, end-to-end** — fail-closed Ed25519 verification + `bundle-sign` CLI + `docs/GUIDE-POLICY-SIGNING.md`. *(area/policy, PR #71)*
+- ✅ **Plugin system hardening** — strict mode, manifest validation, Ed25519 manifest signing, `docs/GUIDE-PLUGIN-AUTHORING.md`. *(area/plugin, PR #73)*
+- ✅ **SDK single source of truth** — `docs/SDK-REGISTRY.md`. *(area/sdk, PR #69)*
+- ✅ **Release process** — `docs/RELEASING.md`. *(area/packaging, PR #67)*
 
 ## Later
 
+- ⬜ **Transparent gRPC forwarding** — proxy the authorized gRPC call to the upstream backend (raw-codec director); builds on the terminate-and-authorize server from PR #74. *(area/proxy, #75)*
 - ⬜ **Supply-chain provenance** — SBOM generation and build provenance (e.g. SLSA) in the release workflow. *(area/packaging)*
 - ⬜ **Multi-tenant policy context** — mature `TenantContext` handling and tenant-scoped obligations end-to-end. *(area/policy)*
 - ⬜ **Policy hot-reload / bundle registry** — reload policy bundles without restart; optional remote bundle source. *(area/policy)*
