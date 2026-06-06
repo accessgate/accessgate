@@ -22,6 +22,69 @@ func TestValidate_RequiredFields(t *testing.T) {
 	}
 }
 
+func TestValidateGRPCUpstreamSSRF(t *testing.T) {
+	// Loopback / private addresses are rejected.
+	for _, addr := range []string{
+		"127.0.0.1:9090",
+		"10.0.0.5:9090",
+		"192.168.1.10:9090",
+		"169.254.169.254:80", // cloud metadata
+	} {
+		if err := validateGRPCUpstreamSSRF(addr); err == nil {
+			t.Errorf("expected SSRF rejection for %q", addr)
+		}
+	}
+
+	// Malformed host:port forms are rejected.
+	for _, addr := range []string{
+		"not-a-host-port",
+		"host-without-port",
+		":9090",      // no host
+		"127.0.0.1:", // no port
+	} {
+		if err := validateGRPCUpstreamSSRF(addr); err == nil {
+			t.Errorf("expected error for malformed addr %q", addr)
+		}
+	}
+
+	// A public IP literal passes (no DNS, deterministic).
+	if err := validateGRPCUpstreamSSRF("203.0.113.10:9090"); err != nil {
+		t.Errorf("expected public address to pass: %v", err)
+	}
+}
+
+func TestValidate_GRPCUpstreamWiring(t *testing.T) {
+	base := func() *Config {
+		return &Config{
+			UpstreamURL: "http://203.0.113.10:3000",
+			AuthURL:     "http://203.0.113.11:8080",
+		}
+	}
+
+	// Loopback gRPC upstream is rejected by Validate when private upstreams are
+	// not allowed.
+	cfg := base()
+	cfg.GRPCUpstreamAddr = "127.0.0.1:9090"
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected SSRF error for loopback grpc_upstream_addr via Validate")
+	}
+
+	// With allow_private_upstreams, the loopback address is accepted.
+	cfg = base()
+	cfg.AllowPrivateUpstreams = true
+	cfg.GRPCUpstreamAddr = "127.0.0.1:9090"
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected no error with allow_private_upstreams: %v", err)
+	}
+
+	// Empty grpc_upstream_addr keeps legacy behavior and passes validation.
+	cfg = base()
+	cfg.GRPCUpstreamAddr = ""
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("empty grpc_upstream_addr should validate: %v", err)
+	}
+}
+
 func TestValidate_ProxyPathPrefix(t *testing.T) {
 	// AllowPrivateUpstreams=true because "u" and "a" are non-resolvable hostnames used to test prefix normalization only.
 	cfg := &Config{UpstreamURL: "http://u", AuthURL: "http://a", ProxyPathPrefix: "graphql", AllowPrivateUpstreams: true}

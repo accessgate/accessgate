@@ -130,6 +130,8 @@ when the value is empty/zero.
 | `cookie_name`       | string        | no       | `__Host-ess_session` | Session cookie name (must match the auth service). |
 | `http_port`         | string        | no       | `8081`               | Port the proxy HTTP server listens on. |
 | `grpc_listen_addr`  | string        | no       | `""` (disabled)      | When set to a `host:port` listen address (e.g. `:9091`), enables the optional proxy gRPC server. It runs alongside the HTTP server and installs the AccessGate authz interceptors on every call. Empty disables it. See [GUIDE-GRPC.md](./GUIDE-GRPC.md). |
+| `grpc_upstream_addr` | string       | no       | `""` (Unimplemented) | Upstream gRPC backend `host:port` (e.g. `upstream:9090`). When set (and `grpc_listen_addr` is enabled), authorized gRPC calls are **terminated, authorized, and transparently forwarded** to this upstream over a shared connection, with the authz identity headers injected as lowercase outbound gRPC metadata. Empty keeps the legacy behavior (authorized calls return `codes.Unimplemented`). SSRF-validated like `upstream_url` (honors `allow_private_upstreams`). See [GUIDE-GRPC.md](./GUIDE-GRPC.md). |
+| `grpc_upstream_insecure` | flexible bool | no   | `false` (TLS)        | Transport security for dialing `grpc_upstream_addr`. `false` dials with TLS; `true` uses a plaintext/insecure transport, intended only for local dev or trusted in-cluster networks. |
 
 ### Policy
 

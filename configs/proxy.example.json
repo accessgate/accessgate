@@ -6,6 +6,8 @@
   "cookie_name": "__Host-ess_session",
   "http_port": "8081",
   "grpc_listen_addr": "",
+  "grpc_upstream_addr": "",
+  "grpc_upstream_insecure": false,
   "policy_engine": "wasm",
   "policy_bundle_path": "",
   "policy_fallback_allow": true,

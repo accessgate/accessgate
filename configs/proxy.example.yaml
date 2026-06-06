@@ -9,6 +9,8 @@ auth_url: "https://auth.example.com"
 cookie_name: "__Host-ess_session"
 http_port: "8081"
 grpc_listen_addr: ""  # e.g. ":9091" to enable the optional proxy gRPC authz server; empty disables it
+grpc_upstream_addr: ""  # e.g. "upstream:9090"; when set, authorized gRPC calls are forwarded to this upstream. Empty keeps Unimplemented behavior. SSRF-validated like upstream_url.
+grpc_upstream_insecure: false  # false = dial upstream with TLS; true = plaintext (local/dev or trusted in-cluster only)
 policy_engine: "wasm"
 policy_bundle_path: ""
 policy_fallback_allow: true

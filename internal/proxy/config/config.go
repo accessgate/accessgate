@@ -59,6 +59,22 @@ type Config struct {
 	// on every call. An empty value (the default) disables the gRPC server.
 	GRPCListenAddr string `json:"grpc_listen_addr"`
 
+	// GRPCUpstreamAddr is the "host:port" address of the upstream gRPC backend
+	// that authorized calls are transparently forwarded to. When non-empty (and
+	// the gRPC server is enabled via GRPCListenAddr), the proxy terminates,
+	// authorizes, and then forwards each call to this upstream over a shared
+	// client connection, injecting the authz identity headers as outbound gRPC
+	// metadata. An empty value (the default) keeps the legacy behavior:
+	// authorized calls return codes.Unimplemented. The address is SSRF-validated
+	// at startup like upstream_url (honoring allow_private_upstreams).
+	GRPCUpstreamAddr string `json:"grpc_upstream_addr"`
+
+	// GRPCUpstreamInsecure controls the transport security used to dial the
+	// upstream gRPC backend. When false (the default), the proxy dials with TLS.
+	// When true, the proxy dials with an insecure (plaintext) transport, which
+	// is intended only for local development or trusted in-cluster networks.
+	GRPCUpstreamInsecure FlexibleBool `json:"grpc_upstream_insecure"`
+
 	// PolicyEngine selects the policy execution backend. Supported: "wasm" (default), "rego".
 	PolicyEngine PolicyEngine `json:"policy_engine"`
 	// PolicyBundlePath is the path to the policy bundle for the selected engine.
@@ -165,6 +181,43 @@ func validateUpstreamSSRF(rawURL string) error {
 	return nil
 }
 
+// validateGRPCUpstreamSSRF returns an error if the "host:port" gRPC upstream
+// address targets a private/loopback address. It reuses the same blocked-CIDR
+// set as validateUpstreamSSRF; the only difference is the input form (a bare
+// host:port rather than a URL with a scheme).
+func validateGRPCUpstreamSSRF(addr string) error {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("grpc_upstream_addr: invalid host:port %q: %w", addr, err)
+	}
+	if host == "" {
+		return fmt.Errorf("grpc_upstream_addr: no host in %q", addr)
+	}
+	if port == "" {
+		return fmt.Errorf("grpc_upstream_addr: no port in %q", addr)
+	}
+	ips, err := net.LookupHost(host)
+	if err != nil {
+		if ip := net.ParseIP(host); ip != nil {
+			ips = []string{ip.String()}
+		} else {
+			return fmt.Errorf("grpc_upstream_addr: host %q could not be resolved: %w", host, err)
+		}
+	}
+	for _, ipStr := range ips {
+		ip := net.ParseIP(ipStr)
+		if ip == nil {
+			continue
+		}
+		for _, blocked := range blockedUpstreamCIDRs {
+			if blocked.Contains(ip) {
+				return fmt.Errorf("grpc_upstream_addr: host %q resolves to blocked address %s (SSRF protection; set allow_private_upstreams: true only for local dev)", host, ip)
+			}
+		}
+	}
+	return nil
+}
+
 // Validate returns an error if required configuration is missing.
 func (c *Config) Validate() error {
 	if c.UpstreamURL == "" {
@@ -182,6 +235,11 @@ func (c *Config) Validate() error {
 	if !c.AllowPrivateUpstreams {
 		if err := validateUpstreamSSRF(c.UpstreamURL); err != nil {
 			return err
+		}
+		if c.GRPCUpstreamAddr != "" {
+			if err := validateGRPCUpstreamSSRF(c.GRPCUpstreamAddr); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
