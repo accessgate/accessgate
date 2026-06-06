@@ -129,6 +129,7 @@ when the value is empty/zero.
 | `require_auth`      | flexible bool | no       | `false`              | Whether requests must be authenticated. |
 | `cookie_name`       | string        | no       | `__Host-ess_session` | Session cookie name (must match the auth service). |
 | `http_port`         | string        | no       | `8081`               | Port the proxy HTTP server listens on. |
+| `grpc_listen_addr`  | string        | no       | `""` (disabled)      | When set to a `host:port` listen address (e.g. `:9091`), enables the optional proxy gRPC server. It runs alongside the HTTP server and installs the AccessGate authz interceptors on every call. Empty disables it. See [GUIDE-GRPC.md](./GUIDE-GRPC.md). |
 
 ### Policy
 

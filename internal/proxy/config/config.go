@@ -53,6 +53,12 @@ type Config struct {
 	CookieName string `json:"cookie_name"`
 	HTTPPort   string `json:"http_port"`
 
+	// GRPCListenAddr, when non-empty, enables the optional proxy gRPC server.
+	// It is a "host:port" listen address (e.g. ":9091"). The gRPC server runs
+	// alongside the HTTP server and installs the AccessGate authz interceptors
+	// on every call. An empty value (the default) disables the gRPC server.
+	GRPCListenAddr string `json:"grpc_listen_addr"`
+
 	// PolicyEngine selects the policy execution backend. Supported: "wasm" (default), "rego".
 	PolicyEngine PolicyEngine `json:"policy_engine"`
 	// PolicyBundlePath is the path to the policy bundle for the selected engine.
