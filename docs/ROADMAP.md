@@ -19,35 +19,45 @@ Status legend: ✅ done · 🚧 in progress · ⬜ planned
 
 ---
 
-## Now (current cycle)
+## Now (current cycle — adoption packaging)
 
-- ✅ Consolidate org: archive AuthSentinel (canonical `accessgate/authsentinel`) and PolicyFront ecosystem repos; reconcile `LINEAGE.md` / `REPO-MAP.md`.
-- ✅ **Rename the Go module** `github.com/ArmanAvanesyan/accessgate` → `github.com/accessgate/accessgate` to match the repository. *(area/core-runtime)*
-- ✅ Repo hygiene: ignore scratch/tooling artifacts.
-- ✅ Add `pkg/token` unit tests (auth-critical; was 0% file coverage).
-- ✅ Add CI security scanning (`govulncheck` + CodeQL) and Dependabot.
-- ✅ Core docs: `ARCHITECTURE.md`, `CONTRIBUTING.md`, `SECURITY.md`, `MIGRATION.md`, ADRs 0001–0004.
+The binding constraint is adoption friction: AccessGate is OSS infrastructure with no
+`docker run` / `docker compose up` path today. This cycle makes trial-to-running take
+minutes, not hours. Tracked toward the **`v1.0`** milestone.
 
-## Next — completed (2026-06)
+- ⬜ **Production container images + GHCR publish workflow** — distroless, multi-arch (amd64/arm64), non-root images for `accessgate-auth`/`accessgate-proxy`, published to GHCR on release. In-repo. *(area/packaging, P1, #77)*
+- ⬜ **docker-compose quickstart stack** — `deployments/docker/`: auth + proxy + redis + sample upstream/OIDC/policy; `docker compose up` → allow/deny in < 5 min (also fixes the dangling `make e2e-docker`). *(area/packaging, P1, #78)*
+- ⬜ **README quickstart + RELEASING container docs**. *(area/docs, P1, #79)*
+- ⬜ **ADR: container image tooling** — ko vs GoReleaser `dockers:` (blocks #77). *(area/packaging, P1, #83)*
+- ⬜ **Perf benchmark harness (spike)** — repeatable hot-path bench so 1.0 can cite numbers. *(area/proxy, P2, #82)*
 
-- ✅ **GraphQL adapter** — operation extraction (raw + JSON) wired into authz. *(area/proxy, PR #70)*
-- ✅ **gRPC adapter + proxy gRPC server** — `ExtractMethod`, authz interceptors, config-gated gRPC listener (terminate-and-authorize; transparent forwarding tracked in #75). *(area/proxy, PR #74)*
-- ✅ **CI coverage gate** — 40% threshold + expanded proxy/auth integration tests. *(PR #72)*
-- ✅ **Config validation in CI** — `make validate-config` on examples + schema-drift check; `docs/CONFIG-KEYS.md`; cross-platform `validateconfig` fix. *(PR #68, #66)*
-- ✅ **WASM bundle signing, end-to-end** — fail-closed Ed25519 verification + `bundle-sign` CLI + `docs/GUIDE-POLICY-SIGNING.md`. *(area/policy, PR #71)*
-- ✅ **Plugin system hardening** — strict mode, manifest validation, Ed25519 manifest signing, `docs/GUIDE-PLUGIN-AUTHORING.md`. *(area/plugin, PR #73)*
-- ✅ **SDK single source of truth** — `docs/SDK-REGISTRY.md`. *(area/sdk, PR #69)*
-- ✅ **Release process** — `docs/RELEASING.md`. *(area/packaging, PR #67)*
+## Next
+
+- ⬜ **SBOM + provenance + image signing** — cosign + syft (SBOM) + SLSA provenance, in the publish workflow. *(area/packaging, P2, #45)*
+- ⬜ **Transparent gRPC forwarding** — authorize *and* forward the gRPC call to the upstream (raw-codec director); completes PR #74. *(area/proxy, P2, #75)*
+- ⬜ **Policy hot-reload (local file watch)** — reload bundles without restart, fail-closed during reload (remote registry split to Later). *(area/policy, P2, #47)*
+- ⬜ **Helm chart (in-repo `deploy/helm/`)** — for Kubernetes adopters once compose proves the value. *(area/packaging, P2, #80)*
+- ⬜ **Session HA guidance doc (Redis)** — operational topologies for sessions/PKCE/refresh-lock. *(area/core-runtime, P3, #85)*
+- ⬜ **v1.0 hardening (umbrella)** — config-schema freeze, breaking-change audit, perf budgets, security pass. *(milestone `v1.0`, #86)*
 
 ## Later
 
-- ⬜ **Transparent gRPC forwarding** — proxy the authorized gRPC call to the upstream backend (raw-codec director); builds on the terminate-and-authorize server from PR #74. *(area/proxy, #75)*
-- ⬜ **Supply-chain provenance** — SBOM generation and build provenance (e.g. SLSA) in the release workflow. *(area/packaging)*
-- ⬜ **Multi-tenant policy context** — mature `TenantContext` handling and tenant-scoped obligations end-to-end. *(area/policy)*
-- ⬜ **Policy hot-reload / bundle registry** — reload policy bundles without restart; optional remote bundle source. *(area/policy)*
-- ⬜ **Session store options & HA** — document/extend Redis HA and alternative session backends. *(area/core-runtime)*
-- ⬜ **Additional gateway integrations** — broaden beyond Caddy/Traefik/KrakenD as demand warrants. *(area/plugin)*
-- ⬜ **Performance budgets** — benchmark the proxy hot path (principal resolve + policy eval) and set regression budgets. *(area/proxy)*
+- ⬜ **Multi-tenant policy context** — mature `TenantContext` + tenant-scoped obligations; advance on ≥3 adopter signals. *(area/policy, #46)*
+- ⬜ **Alternative session backends** — beyond Redis; advance when an adopter can't run Redis. *(area/core-runtime, #48)*
+- ⬜ **Remote policy bundle registry** — centralized multi-instance policy distribution. *(area/policy, #84)*
+- ⬜ **Additional gateway integrations** — beyond Caddy/Traefik/KrakenD, demand-driven. *(area/plugin, #49)*
+- ⬜ **Performance budgets as CI gate** — after the harness (#82) and a published image have real usage. *(area/proxy, #50)*
+- ⬜ **Observability dashboards + alert examples** — Grafana dashboards/alerts for `accessgate_*` metrics. *(area/observability, #81)*
+
+---
+
+## Shipped (2026-06)
+
+- ✅ Org consolidation: AuthSentinel + PolicyFront repos archived; `LINEAGE.md`/`REPO-MAP.md` reconciled.
+- ✅ Go module renamed → `github.com/accessgate/accessgate`.
+- ✅ Repo hygiene; `pkg/token` unit tests; CI security scanning (`govulncheck` + CodeQL) + Dependabot.
+- ✅ Core docs: `ARCHITECTURE`, `CONTRIBUTING`, `SECURITY`, `MIGRATION`, ADRs 0001–0004.
+- ✅ GraphQL adapter (#70); gRPC adapter + proxy gRPC server (#74); CI coverage gate (#72); config validation + schema-drift CI + `CONFIG-KEYS.md` (#68/#66); WASM bundle signing — fail-closed Ed25519 + `bundle-sign` (#71); plugin discovery hardening + manifest signing (#73); SDK registry (#69); release docs (#67).
 
 ---
 
@@ -56,3 +66,4 @@ Status legend: ✅ done · 🚧 in progress · ⬜ planned
 - New work enters as a GitHub issue with `area/*` + `priority/*` labels and lands on the **AccessGate Core Roadmap** project (Backlog → Ready → In Progress → In Review → Release Ready → Done).
 - Cross-cutting consolidation/governance items use the **AccessGate Consolidation** project.
 - Significant technical decisions are recorded as ADRs under [`docs/adr/`](adr/).
+- The **`v1.0`** GitHub milestone gathers the hardening bar (see umbrella #86); items bound for 1.0 are attached to it.
