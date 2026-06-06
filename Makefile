@@ -39,7 +39,7 @@ help:
 	@echo "  proto-lint              Run buf lint on protobuf APIs"
 	@echo "  proto-breaking          Run buf breaking checks against main"
 	@echo "  proto-generate          Generate Go and TS code from protobufs (via buf)"
-	@echo "  e2e-docker              Start docker-compose (agent, proxy, redis, bff), run E2E smoke playbook, then down"
+	@echo "  e2e-docker              Build+start the docker-compose quickstart stack, run the allow/deny smoke playbook, then down"
 
 test: test-go test-js
 
@@ -99,9 +99,14 @@ proto-breaking:
 proto-generate:
 	$(BUF) generate
 
-# E2E: start compose, wait for health, run test/e2e/playbook.sh, then compose down.
-# Requires: docker, docker-compose, curl. Set .env from deployments/docker/.env.example.
+# E2E: build + start the docker-compose quickstart stack, wait for the proxy to
+# be healthy, run the allow/deny smoke playbook, then tear the stack down
+# (teardown always runs, even if the playbook fails). The full lifecycle lives
+# in test/e2e/run-docker-e2e.ps1 to avoid Make/cmd quoting pitfalls and to work
+# on both Windows PowerShell 5.1 and PowerShell 7+. Uses Docker Compose v2
+# (`docker compose`). Requires: docker (with the compose plugin).
+# Seeds deployments/docker/.env from .env.example when missing.
 e2e-docker:
-	@powershell -NoProfile -ExecutionPolicy Bypass -Command "cd 'deployments/docker'; docker-compose up -d | Out-Null; Start-Sleep -Seconds 15; cd '../..'; & './test/e2e/playbook.ps1'; $$rc=$$LASTEXITCODE; cd 'deployments/docker'; docker-compose down | Out-Null; exit $$rc"
+	@powershell -NoProfile -ExecutionPolicy Bypass -File test/e2e/run-docker-e2e.ps1
 
 

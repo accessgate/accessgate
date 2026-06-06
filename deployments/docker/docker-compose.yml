@@ -1,0 +1,168 @@
+# AccessGate local quickstart stack (roadmap #78).
+#
+#   docker compose up
+#
+# brings up a complete, self-contained local stack:
+#
+#   mockidp           in-repo mock OIDC issuer (cmd/mockidp) — stands in for a
+#                     real IdP so no external account/registration is needed.
+#   redis             session + PKCE store for accessgate-auth.
+#   upstream          sample protected backend (httpbin) the proxy forwards to.
+#   accessgate-auth   session / OIDC login service.
+#   accessgate-proxy  policy-enforcing reverse proxy (the entry point you curl).
+#
+# The proxy is published on http://localhost:8081. The sample Rego policy
+# (./policy/sample.rego) allows GET /get and denies everything else, so you can
+# see a 200 (allow) and a 403 (deny) through the proxy in seconds — no login
+# required. See ./README.md for the curl demo and how to exercise OIDC login.
+#
+# Images are built from the committed multi-stage Dockerfiles in
+# ../../build/docker (ADR-0005: distroless, non-root, static). Secrets/vars come
+# from a .env file (copy .env.example -> .env). Values here are LOCAL-ONLY
+# defaults and must never be used in production.
+
+name: accessgate-quickstart
+
+services:
+  # --- Mock OIDC issuer ----------------------------------------------------
+  # Self-contained local IdP. Signs tokens with an ephemeral in-memory RSA key.
+  # distroless image has no shell, so there is no in-container healthcheck;
+  # accessgate-auth performs OIDC discovery lazily (first login) so it does not
+  # need the IdP to be reachable at startup.
+  mockidp:
+    build:
+      context: ../..
+      dockerfile: build/docker/Dockerfile.mockidp
+    environment:
+      MOCKIDP_LISTEN_ADDR: ":8082"
+      # Issuer must equal OIDC_ISSUER below and be resolvable from the proxy and
+      # the user's browser. Inside the compose network the host is "mockidp".
+      MOCKIDP_ISSUER: "http://mockidp:8082"
+      MOCKIDP_TOKEN_ENDPOINT: "http://mockidp:8082/token"
+      MOCKIDP_JWKS_URI: "http://mockidp:8082/jwks"
+      # Browser-facing endpoints use localhost (the user's machine) so an
+      # interactive login redirect resolves from a browser on the host.
+      MOCKIDP_AUTHORIZATION_ENDPOINT: "http://localhost:8082/authorize"
+      MOCKIDP_END_SESSION_ENDPOINT: "http://localhost:8082/logout"
+      MOCKIDP_SUB: "${MOCKIDP_SUB:-quickstart-user}"
+      MOCKIDP_EMAIL: "${MOCKIDP_EMAIL:-quickstart-user@example.com}"
+      # Longer token lifetime than the 10s default so an interactive demo login
+      # does not expire mid-flow.
+      MOCKIDP_EXPIRES_IN_SECONDS: "3600"
+    ports:
+      - "8082:8082"
+    restart: unless-stopped
+
+  # --- Session store -------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 2s
+    restart: unless-stopped
+
+  # --- Sample protected upstream ------------------------------------------
+  # httpbin echoes requests. GET /get returns 200 with a JSON body; this is the
+  # "allow" target. The proxy forwards allowed requests here unchanged.
+  upstream:
+    image: kennethreitz/httpbin:latest
+    expose:
+      - "80"
+    restart: unless-stopped
+
+  # --- AccessGate auth (sessions / OIDC) -----------------------------------
+  accessgate-auth:
+    build:
+      context: ../..
+      dockerfile: build/docker/Dockerfile.auth
+    depends_on:
+      redis:
+        condition: service_healthy
+      mockidp:
+        condition: service_started
+    environment:
+      HTTP_PORT: "8080"
+      # OIDC: point at the mock issuer. OIDC_ISSUER must match MOCKIDP_ISSUER.
+      OIDC_ISSUER: "http://mockidp:8082"
+      OIDC_CLIENT_ID: "${OIDC_CLIENT_ID:-accessgate-local}"
+      OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET:-local-mock-secret}"
+      # The auth service serves the OIDC callback at /callback. It is published
+      # on host port 8080 so an interactive browser login completes locally.
+      OIDC_REDIRECT_URI: "http://localhost:8080/callback"
+      # OIDC_SCOPES is intentionally omitted: the auth config defaults to
+      # "openid,profile" and the mock IdP ignores scopes. (The env-only loader
+      # decodes the scopes list structurally, so passing it as a comma string
+      # here is rejected; set it via a mounted config file if you need to.)
+      REDIS_URL: "redis://redis:6379"
+      COOKIE_SIGNING_SECRET: "${COOKIE_SIGNING_SECRET:?set COOKIE_SIGNING_SECRET in .env}"
+      # Local dev over plain HTTP: do not require the Secure cookie attribute.
+      COOKIE_SECURE: "false"
+      COOKIE_SAME_SITE: "lax"
+      APP_BASE_URL: "http://localhost:8080"
+      # ALLOWED_REDIRECT_PATHS defaults to ["/"] in config validation; omitted
+      # here for the same env-decoding reason noted for OIDC_SCOPES above.
+      # Enables the guarded /admin and /internal/session endpoints (local-only
+      # secret). See README for the interactive-login flow.
+      ADMIN_SECRET: "${ADMIN_SECRET:-local-admin-secret}"
+    ports:
+      # Published so an interactive OIDC login (GET /login) and the callback
+      # complete in a host browser. Not required for the default policy-only demo.
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/accessgate-auth", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  # --- AccessGate proxy (policy enforcement) -------------------------------
+  # This is the service you curl. It evaluates the Rego policy on every request
+  # and either forwards to the upstream (allow) or short-circuits (deny).
+  accessgate-proxy:
+    build:
+      context: ../..
+      dockerfile: build/docker/Dockerfile.proxy
+    depends_on:
+      accessgate-auth:
+        condition: service_healthy
+      upstream:
+        condition: service_started
+    environment:
+      HTTP_PORT: "8081"
+      AUTH_URL: "http://accessgate-auth:8080"
+      UPSTREAM_URL: "http://upstream:80"
+      # The proxy serves requests under this prefix and forwards the full path
+      # to the upstream. httpbin echoes any /anything/* path with 200, so the
+      # sample policy can demonstrate allow (/anything/allow) and deny
+      # (/anything/deny) against a real upstream.
+      PROXY_PATH_PREFIX: "/anything"
+      # Deterministic policy-only demo: the sample policy decides allow/deny.
+      # Set REQUIRE_AUTH=true (see README) to also require a logged-in session.
+      REQUIRE_AUTH: "${REQUIRE_AUTH:-false}"
+      # Use the Rego engine with the mounted sample bundle. Fallback is deny
+      # (fail-closed) if the policy fails to load.
+      POLICY_ENGINE: "rego"
+      POLICY_BUNDLE_PATH: "/etc/accessgate/policy/sample.rego"
+      POLICY_FALLBACK_ALLOW: "false"
+      # The upstream resolves to a private docker-network address; SSRF guard
+      # must be relaxed for local dev only (never in production).
+      ALLOW_PRIVATE_UPSTREAMS: "true"
+      COOKIE_NAME: "__Host-ess_session"
+    volumes:
+      # Sample Rego policy, mounted read-only. Edit ./policy/sample.rego and
+      # `docker compose restart accessgate-proxy` to iterate.
+      - ./policy:/etc/accessgate/policy:ro
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/accessgate-proxy", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
