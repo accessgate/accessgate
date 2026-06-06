@@ -1,0 +1,56 @@
+AccessGate {{ .Chart.AppVersion }} has been deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Components:
+{{- if .Values.proxy.enabled }}
+  • accessgate-proxy (entry point) — Service {{ include "accessgate.componentFullname" (dict "context" . "component" "proxy") }}:{{ .Values.proxy.service.port }}{{ if .Values.proxy.grpc.enabled }} (+ gRPC :{{ .Values.proxy.grpc.port }}){{ end }}
+{{- end }}
+{{- if .Values.auth.enabled }}
+  • accessgate-auth (OIDC/session)  — Service {{ include "accessgate.componentFullname" (dict "context" . "component" "auth") }}:{{ .Values.auth.service.port }}
+{{- end }}
+
+Redis session store:
+{{- if .Values.redis.enabled }}
+  • Bundled Bitnami Redis subchart. accessgate-auth REDIS_URL = {{ include "accessgate.redisURL" . }}
+{{- else }}
+  • External Redis: {{ .Values.externalRedis.url }}
+{{- end }}
+
+1. Reach the proxy (the URL your clients hit) by port-forwarding:
+
+   kubectl --namespace {{ .Release.Namespace }} port-forward \
+     svc/{{ include "accessgate.componentFullname" (dict "context" . "component" "proxy") }} \
+     {{ .Values.proxy.service.port }}:{{ .Values.proxy.service.port }}
+
+   curl -i http://127.0.0.1:{{ .Values.proxy.service.port }}{{ .Values.proxy.config.proxyPathPrefix | default "/graphql" }}
+
+2. Verify health:
+
+   kubectl --namespace {{ .Release.Namespace }} get pods \
+     -l app.kubernetes.io/instance={{ .Release.Name }}
+
+   The proxy and auth pods expose /livez, /readyz, /healthz.
+
+{{- if not .Values.secrets.existingSecret }}
+
+3. Secrets were created in Secret "{{ include "accessgate.secretName" . }}".
+   For production, prefer secrets.existingSecret (a Secret you manage) and avoid
+   committing values to source control.
+{{- else }}
+
+3. Using existing Secret "{{ .Values.secrets.existingSecret }}". Ensure it contains keys:
+     - {{ .Values.secrets.secretKeys.cookieSigningSecret }} (required)
+     - {{ .Values.secrets.secretKeys.oidcClientSecret }} (optional)
+     - {{ .Values.secrets.secretKeys.adminSecret }} (optional)
+{{- end }}
+
+{{- if and .Values.auth.enabled (not .Values.auth.config.oidcIssuer) }}
+
+WARNING: auth.config.oidcIssuer is empty. accessgate-auth requires OIDC_ISSUER,
+OIDC_REDIRECT_URI, OIDC_CLIENT_ID, and APP_BASE_URL. The auth pod will fail to
+start until these are set. See docs/CONFIG-KEYS.md.
+{{- end }}
+{{- if and .Values.proxy.enabled (not .Values.proxy.config.upstreamURL) }}
+
+WARNING: proxy.config.upstreamURL is empty. accessgate-proxy requires
+UPSTREAM_URL. The proxy pod will fail to start until it is set.
+{{- end }}

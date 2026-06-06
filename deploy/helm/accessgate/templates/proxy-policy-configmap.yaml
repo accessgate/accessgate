@@ -1,0 +1,15 @@
+{{- if and .Values.proxy.enabled .Values.proxy.policyBundle.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "accessgate.componentFullname" (dict "context" . "component" "proxy") }}-policy
+  labels:
+    {{- include "accessgate.componentLabels" (dict "context" . "component" "proxy") | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  {{ .Values.proxy.policyBundle.fileName }}: |-
+{{ .Values.proxy.policyBundle.content | indent 4 }}
+{{- end }}
