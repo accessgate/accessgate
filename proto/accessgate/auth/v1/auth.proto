@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package accessgate.auth.v1;
 
-option go_package = "github.com/ArmanAvanesyan/accessgate/proto/gen/go/accessgate/auth/v1;authv1";
+option go_package = "github.com/accessgate/accessgate/proto/gen/go/accessgate/auth/v1;authv1";
 
 import "accessgate/sdk/v1/identity.proto";
 

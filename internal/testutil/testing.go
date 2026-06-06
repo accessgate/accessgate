@@ -3,7 +3,7 @@ package testutil
 import (
 	"time"
 
-	"github.com/ArmanAvanesyan/accessgate/pkg/token"
+	"github.com/accessgate/accessgate/pkg/token"
 )
 
 // NewTestPrincipal creates a minimal Principal for use in tests.

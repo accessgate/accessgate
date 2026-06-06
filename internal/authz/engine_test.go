@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ArmanAvanesyan/accessgate/pkg/token"
+	"github.com/accessgate/accessgate/pkg/token"
 )
 
 func TestDefaultHeaderBuilder_NilPrincipalNoPanic(t *testing.T) {

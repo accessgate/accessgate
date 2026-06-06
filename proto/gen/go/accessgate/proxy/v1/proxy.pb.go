@@ -7,7 +7,7 @@
 package proxyv1
 
 import (
-	v1 "github.com/ArmanAvanesyan/accessgate/proto/gen/go/accessgate/sdk/v1"
+	v1 "github.com/accessgate/accessgate/proto/gen/go/accessgate/sdk/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -586,7 +586,7 @@ const file_accessgate_proxy_v1_proxy_proto_rawDesc = "" +
 	"\fProxyService\x12Q\n" +
 	"\x06Decide\x12\".accessgate.proxy.v1.DecideRequest\x1a#.accessgate.proxy.v1.DecideResponse\x12x\n" +
 	"\x13IntrospectPrincipal\x12/.accessgate.proxy.v1.IntrospectPrincipalRequest\x1a0.accessgate.proxy.v1.IntrospectPrincipalResponse\x12c\n" +
-	"\fResolveRoute\x12(.accessgate.proxy.v1.ResolveRouteRequest\x1a).accessgate.proxy.v1.ResolveRouteResponseBOZMgithub.com/ArmanAvanesyan/accessgate/proto/gen/go/accessgate/proxy/v1;proxyv1b\x06proto3"
+	"\fResolveRoute\x12(.accessgate.proxy.v1.ResolveRouteRequest\x1a).accessgate.proxy.v1.ResolveRouteResponseBKZIgithub.com/accessgate/accessgate/proto/gen/go/accessgate/proxy/v1;proxyv1b\x06proto3"
 
 var (
 	file_accessgate_proxy_v1_proxy_proto_rawDescOnce sync.Once

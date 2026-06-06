@@ -3,7 +3,7 @@ package provider
 import (
 	"context"
 
-	"github.com/ArmanAvanesyan/accessgate/pkg/oidc"
+	"github.com/accessgate/accessgate/pkg/oidc"
 )
 
 // IdP is the identity-provider abstraction used by the agent service for login, callback, refresh, and logout.

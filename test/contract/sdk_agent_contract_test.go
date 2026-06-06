@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/ArmanAvanesyan/accessgate/pkg/auth"
+	"github.com/accessgate/accessgate/pkg/auth"
 )
 
 // TestAgentSessionResponse_JSONShape ensures SessionResponse JSON has the keys

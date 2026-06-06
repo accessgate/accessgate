@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/ArmanAvanesyan/accessgate/internal/auth/config"
+	"github.com/accessgate/accessgate/internal/auth/config"
 )
 
 func TestBuildProviderPluginDefaultOIDC(t *testing.T) {

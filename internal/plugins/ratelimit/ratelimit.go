@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ArmanAvanesyan/accessgate/internal/authz"
-	"github.com/ArmanAvanesyan/accessgate/internal/plugin"
-	"github.com/ArmanAvanesyan/accessgate/internal/policy"
-	"github.com/ArmanAvanesyan/accessgate/pkg/token"
+	"github.com/accessgate/accessgate/internal/authz"
+	"github.com/accessgate/accessgate/internal/plugin"
+	"github.com/accessgate/accessgate/internal/policy"
+	"github.com/accessgate/accessgate/pkg/token"
 )
 
 // Config matches schemas/plugins/pipeline/ratelimit.schema.json.

@@ -3,8 +3,8 @@ package httpserver
 import (
 	"testing"
 
-	pkgproxy "github.com/ArmanAvanesyan/accessgate/internal/authz"
-	"github.com/ArmanAvanesyan/accessgate/internal/proxy/config"
+	pkgproxy "github.com/accessgate/accessgate/internal/authz"
+	"github.com/accessgate/accessgate/internal/proxy/config"
 )
 
 func TestNewReturnsServerWithHandler(t *testing.T) {

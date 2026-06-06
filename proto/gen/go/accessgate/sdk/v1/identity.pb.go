@@ -293,7 +293,7 @@ const file_accessgate_sdk_v1_identity_proto_rawDesc = "" +
 	"\x0etenant_context\x18\a \x01(\v2\x17.google.protobuf.StructR\rtenantContext\"\x7f\n" +
 	"\vAuthContext\x12:\n" +
 	"\tprincipal\x18\x01 \x01(\v2\x1c.accessgate.sdk.v1.PrincipalR\tprincipal\x124\n" +
-	"\asession\x18\x02 \x01(\v2\x1a.accessgate.sdk.v1.SessionR\asessionBKZIgithub.com/ArmanAvanesyan/accessgate/proto/gen/go/accessgate/sdk/v1;sdkv1b\x06proto3"
+	"\asession\x18\x02 \x01(\v2\x1a.accessgate.sdk.v1.SessionR\asessionBGZEgithub.com/accessgate/accessgate/proto/gen/go/accessgate/sdk/v1;sdkv1b\x06proto3"
 
 var (
 	file_accessgate_sdk_v1_identity_proto_rawDescOnce sync.Once

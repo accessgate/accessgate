@@ -6,14 +6,14 @@ import (
 	"net/http"
 	"os"
 
-	pkgproxy "github.com/ArmanAvanesyan/accessgate/internal/authz"
-	"github.com/ArmanAvanesyan/accessgate/internal/plugin"
-	"github.com/ArmanAvanesyan/accessgate/internal/plugins/register"
-	"github.com/ArmanAvanesyan/accessgate/internal/policy"
-	"github.com/ArmanAvanesyan/accessgate/internal/proxy"
-	"github.com/ArmanAvanesyan/accessgate/internal/proxy/config"
-	"github.com/ArmanAvanesyan/accessgate/internal/proxy/httpserver"
-	"github.com/ArmanAvanesyan/accessgate/pkg/observability"
+	pkgproxy "github.com/accessgate/accessgate/internal/authz"
+	"github.com/accessgate/accessgate/internal/plugin"
+	"github.com/accessgate/accessgate/internal/plugins/register"
+	"github.com/accessgate/accessgate/internal/policy"
+	"github.com/accessgate/accessgate/internal/proxy"
+	"github.com/accessgate/accessgate/internal/proxy/config"
+	"github.com/accessgate/accessgate/internal/proxy/httpserver"
+	"github.com/accessgate/accessgate/pkg/observability"
 )
 
 func loadConfig() (*config.Config, error) {

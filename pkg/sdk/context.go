@@ -4,10 +4,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ArmanAvanesyan/accessgate/pkg/auth"
-	pkgsession "github.com/ArmanAvanesyan/accessgate/pkg/session"
-	"github.com/ArmanAvanesyan/accessgate/pkg/token"
-	sdkv1 "github.com/ArmanAvanesyan/accessgate/proto/gen/go/accessgate/sdk/v1"
+	"github.com/accessgate/accessgate/pkg/auth"
+	pkgsession "github.com/accessgate/accessgate/pkg/session"
+	"github.com/accessgate/accessgate/pkg/token"
+	sdkv1 "github.com/accessgate/accessgate/proto/gen/go/accessgate/sdk/v1"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 

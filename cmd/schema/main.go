@@ -6,9 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
-	authconfig "github.com/ArmanAvanesyan/accessgate/internal/auth/config"
-	proxyconfig "github.com/ArmanAvanesyan/accessgate/internal/proxy/config"
 	schemagen "github.com/ArmanAvanesyan/go-config/extensions/schema/generate"
+	authconfig "github.com/accessgate/accessgate/internal/auth/config"
+	proxyconfig "github.com/accessgate/accessgate/internal/proxy/config"
 )
 
 func main() {

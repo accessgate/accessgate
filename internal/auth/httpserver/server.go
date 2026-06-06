@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ArmanAvanesyan/accessgate/internal/auth/config"
-	"github.com/ArmanAvanesyan/accessgate/internal/auth/errormap"
-	"github.com/ArmanAvanesyan/accessgate/internal/auth/service"
-	"github.com/ArmanAvanesyan/accessgate/pkg/auth"
-	pkgsession "github.com/ArmanAvanesyan/accessgate/pkg/session"
+	"github.com/accessgate/accessgate/internal/auth/config"
+	"github.com/accessgate/accessgate/internal/auth/errormap"
+	"github.com/accessgate/accessgate/internal/auth/service"
+	"github.com/accessgate/accessgate/pkg/auth"
+	pkgsession "github.com/accessgate/accessgate/pkg/session"
 )
 
 // Pinger is used for readiness checks (e.g. Redis).

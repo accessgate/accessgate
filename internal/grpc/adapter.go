@@ -1,7 +1,7 @@
 package grpc
 
 import (
-	"github.com/ArmanAvanesyan/accessgate/internal/authz"
+	"github.com/accessgate/accessgate/internal/authz"
 )
 
 // ToProxyRequest builds a authz.Request from gRPC metadata and method.

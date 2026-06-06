@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ArmanAvanesyan/accessgate/pkg/observability"
-	"github.com/ArmanAvanesyan/accessgate/pkg/session"
+	"github.com/accessgate/accessgate/pkg/observability"
+	"github.com/accessgate/accessgate/pkg/session"
 	"github.com/redis/go-redis/v9"
 )
 

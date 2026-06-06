@@ -8,8 +8,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ArmanAvanesyan/accessgate/internal/plugin"
-	"github.com/ArmanAvanesyan/accessgate/pkg/oidc"
+	"github.com/accessgate/accessgate/internal/plugin"
+	"github.com/accessgate/accessgate/pkg/oidc"
 )
 
 // Config matches schemas/plugins/provider/oidc.schema.json.

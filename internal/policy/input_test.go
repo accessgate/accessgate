@@ -3,7 +3,7 @@ package policy
 import (
 	"testing"
 
-	asTesting "github.com/ArmanAvanesyan/accessgate/internal/testutil"
+	asTesting "github.com/accessgate/accessgate/internal/testutil"
 )
 
 func TestInputWithPrincipalAndHeaders(t *testing.T) {

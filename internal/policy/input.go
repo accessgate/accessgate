@@ -1,6 +1,6 @@
 package policy
 
-import "github.com/ArmanAvanesyan/accessgate/pkg/token"
+import "github.com/accessgate/accessgate/pkg/token"
 
 // Input is the normalized authorization input passed to the policy engine.
 type Input struct {

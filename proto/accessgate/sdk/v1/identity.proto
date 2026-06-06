@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package accessgate.sdk.v1;
 
-option go_package = "github.com/ArmanAvanesyan/accessgate/proto/gen/go/accessgate/sdk/v1;sdkv1";
+option go_package = "github.com/accessgate/accessgate/proto/gen/go/accessgate/sdk/v1;sdkv1";
 
 import "google/protobuf/struct.proto";
 

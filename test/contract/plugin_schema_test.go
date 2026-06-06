@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ArmanAvanesyan/accessgate/internal/plugin"
+	"github.com/accessgate/accessgate/internal/plugin"
 	"github.com/xeipuuv/gojsonschema"
 )
 

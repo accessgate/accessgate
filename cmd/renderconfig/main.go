@@ -8,8 +8,8 @@ import (
 	"os"
 	"strings"
 
-	authconfig "github.com/ArmanAvanesyan/accessgate/internal/auth/config"
-	proxyconfig "github.com/ArmanAvanesyan/accessgate/internal/proxy/config"
+	authconfig "github.com/accessgate/accessgate/internal/auth/config"
+	proxyconfig "github.com/accessgate/accessgate/internal/proxy/config"
 )
 
 func main() {

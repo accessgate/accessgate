@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ArmanAvanesyan/accessgate/internal/authz"
-	"github.com/ArmanAvanesyan/accessgate/internal/policy"
-	"github.com/ArmanAvanesyan/accessgate/pkg/token"
+	"github.com/accessgate/accessgate/internal/authz"
+	"github.com/accessgate/accessgate/internal/policy"
+	"github.com/accessgate/accessgate/pkg/token"
 )
 
 func configuredPlugin(t *testing.T, cfg map[string]any) *Plugin {

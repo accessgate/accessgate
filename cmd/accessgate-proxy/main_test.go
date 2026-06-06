@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ArmanAvanesyan/accessgate/internal/plugin"
-	"github.com/ArmanAvanesyan/accessgate/internal/proxy/config"
+	"github.com/accessgate/accessgate/internal/plugin"
+	"github.com/accessgate/accessgate/internal/proxy/config"
 )
 
 func TestBuildPolicyEngineWASMNoBundle(t *testing.T) {

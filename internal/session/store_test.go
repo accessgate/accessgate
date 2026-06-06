@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/ArmanAvanesyan/accessgate/pkg/cookie"
-	pkgsession "github.com/ArmanAvanesyan/accessgate/pkg/session"
+	"github.com/accessgate/accessgate/pkg/cookie"
+	pkgsession "github.com/accessgate/accessgate/pkg/session"
 )
 
 type stubCodec struct{}

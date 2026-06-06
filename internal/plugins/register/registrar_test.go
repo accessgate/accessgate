@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ArmanAvanesyan/accessgate/internal/plugin"
+	"github.com/accessgate/accessgate/internal/plugin"
 )
 
 func TestRegistrarRegisterBuiltins(t *testing.T) {
