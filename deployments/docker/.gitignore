@@ -1,0 +1,3 @@
+# Local environment file seeded from .env.example by `docker compose` /
+# `make e2e-docker`. Contains local-only default secrets; never commit it.
+.env
