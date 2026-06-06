@@ -96,6 +96,24 @@ jobs:
       - name: Coverage
         run: go test ./... -count=1 -short -coverprofile=coverage.out -covermode=atomic
 
+      - name: Coverage gate
+        # Fail the build if total statement coverage drops below the threshold.
+        # COVERAGE_THRESHOLD is the single source of truth: set a few points
+        # below the current total so it ratchets up over time without flapping.
+        # Measured total at introduction: 43.9% -> gate at 40%.
+        env:
+          COVERAGE_THRESHOLD: "40.0"
+        run: |
+          total="$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}' | tr -d '%')"
+          echo "Total coverage: ${total}% (threshold: ${COVERAGE_THRESHOLD}%)"
+          awk -v have="$total" -v want="$COVERAGE_THRESHOLD" 'BEGIN {
+            if (have + 0 < want + 0) {
+              printf("coverage gate FAILED: %.1f%% < %.1f%%\n", have, want)
+              exit 1
+            }
+            printf("coverage gate passed: %.1f%% >= %.1f%%\n", have, want)
+          }'
+
       - name: Upload coverage
         uses: actions/upload-artifact@v7
         if: always()
