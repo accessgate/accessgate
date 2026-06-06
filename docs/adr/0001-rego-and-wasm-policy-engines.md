@@ -25,8 +25,10 @@ We support two interchangeable policy backends behind a single `policy.Engine` i
 - **WASM** (`internal/policy/wasm.go`, `internal/policy/bundle.go`) — bundles compiled to
   WebAssembly and executed on `wazero`. A module must export linear `memory` and
   `evaluate(input_ptr, input_len) -> (output_ptr, output_len)`. `BundleLoader` compiles and
-  caches by path + mtime and accepts a PEM public key (`bundle_public_key_path`) for
-  signature verification (it logs a warning when verification is disabled).
+  caches by path + mtime and accepts a PEM public key (`bundle_public_key_path`). When a
+  key is configured it verifies the bundle's detached Ed25519 signature (`<bundle>.sig`)
+  before compiling/instantiating, failing closed on any verification failure; when no key
+  is configured it logs a warning and loads unsigned.
 
 Both engines share one contract: they consume the same `policy.Input` and return the same
 `policy.Decision` `{ allow, status_code, reason, headers, obligations }`. This lets the rest
@@ -45,5 +47,7 @@ evaluation fails, it returns the configured `FallbackConfig`, which defaults to 
   it — the safer failure mode for an authz gate.
 - Cost: two engine integrations to maintain, two sets of authoring docs/tests, and the
   shared `Decision` shape becomes a compatibility surface that must evolve carefully.
-- WASM signature verification is wired through configuration; operators must set
-  `bundle_public_key_path` to get integrity guarantees, or accept the logged warning.
+- WASM signature verification is enforced when `bundle_public_key_path` is set: bundles
+  with a missing, malformed, or invalid signature are rejected (fail-closed, no fallback to
+  loading unverified). Operators who leave the key unset accept unsigned loading and the
+  logged warning. See `docs/GUIDE-POLICY-SIGNING.md`.

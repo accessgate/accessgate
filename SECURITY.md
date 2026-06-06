@@ -46,8 +46,12 @@ These reduce risk when running AccessGate:
 - **Secrets**: never commit IdP client secrets or signing secrets; load them from
   environment/secret management. Do **not** embed credentials in git remote URLs.
 - **Policy**: keep the fail-closed default (`policy_fallback_allow` unset/false) so a
-  missing or failed policy denies rather than allows. Sign WASM bundles
-  (`bundle_public_key_path`) and verify them.
+  missing or failed policy denies rather than allows. **Sign WASM bundles and configure
+  `bundle_public_key_path`**: when a public key is set, the proxy verifies each bundle's
+  detached Ed25519 signature (`<bundle>.sig`) **before** compiling or instantiating it, and
+  refuses to load a bundle whose signature is missing, malformed, or invalid (fail-closed —
+  no fallback to loading the unverified bundle). See
+  [docs/GUIDE-POLICY-SIGNING.md](docs/GUIDE-POLICY-SIGNING.md).
 - **Upstreams**: set explicit upstream allowlists and timeouts.
 - **Headers**: AccessGate strips CR/LF from obligation-derived headers to prevent
   header injection — keep this behavior; review custom `HeaderBuilder`s for the same.
