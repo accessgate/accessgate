@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -110,7 +111,7 @@ func validateAgainstSchema(configPath, binary string) error {
 		return fmt.Errorf("decode config json: %w", err)
 	}
 
-	result, err := gojsonschema.Validate(gojsonschema.NewReferenceLoader("file://"+mustAbs(schemaPath)), gojsonschema.NewGoLoader(doc))
+	result, err := gojsonschema.Validate(gojsonschema.NewReferenceLoader(fileURL(mustAbs(schemaPath))), gojsonschema.NewGoLoader(doc))
 	if err != nil {
 		return fmt.Errorf("schema validation failed: %w", err)
 	}
@@ -142,6 +143,26 @@ func findSchemaPath(binary string) (string, error) {
 	}
 
 	return "", fmt.Errorf("schema not found for %q (expected schemas/%s)", binary, name)
+}
+
+// fileURL converts an absolute OS path into a proper file:// URL that parses
+// correctly on every platform. On Windows an absolute path like
+// `C:\a\b.json` has no leading slash, so naively prefixing "file://" yields
+// `file://C:\a\b.json`, which is parsed as host "C:" and fails ("invalid port
+// after host"). We normalize separators to forward slashes and ensure the path
+// component begins with a single "/", producing `file:///C:/a/b.json`. POSIX
+// paths already start with "/", so they become `file:///abs/path` unchanged.
+func fileURL(absPath string) string {
+	// Normalize separators explicitly rather than with filepath.ToSlash, which is
+	// OS-dependent (a no-op off Windows) and would leave backslashes in a Windows
+	// path when this code runs on Linux. Unconditional replacement makes the
+	// result identical on every platform.
+	p := strings.ReplaceAll(absPath, "\\", "/")
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	u := url.URL{Scheme: "file", Path: p}
+	return u.String()
 }
 
 func mustAbs(path string) string {
