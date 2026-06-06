@@ -1,0 +1,44 @@
+# .dockerignore — keep the build context small and free of non-source files.
+# The multi-stage Dockerfiles (build/docker/Dockerfile.{auth,proxy}) build from
+# source, so we KEEP: Go sources, go.mod/go.sum/go.work*, proto/ (incl. the
+# committed proto/gen), schemas/, configs/, buf*.yaml, Makefile.
+# Everything excluded below is irrelevant to `go build ./cmd/...`.
+
+# Version control and CI/automation
+.git
+.gitignore
+.gitattributes
+.github
+.claude
+
+# Agent worktrees (nested checkouts under .claude/worktrees)
+**/worktrees/
+
+# Docs and human-readable text
+docs
+*.md
+
+# Tests and test fixtures (binaries don't need them; *_test.go are ignored by
+# `go build` anyway, but dropping the tree shrinks the context).
+test
+
+# Backups and scratch
+backups
+*.bak
+*.tmp
+
+# IDE / editor / OS tooling
+.idea
+.vscode
+*.swp
+.DS_Store
+
+# Local build output / coverage
+/dist
+coverage.out
+*.out
+
+# The Dockerfiles themselves and other container tooling are not needed inside
+# the build context.
+build/docker
+.dockerignore
