@@ -33,7 +33,7 @@ func main() {
 		logger.Fatalf("config load: %v", err)
 	}
 
-	handler, engine, tracerShutdown, err := buildProxyHandler(context.Background(), cfg)
+	handler, engine, shutdownHooks, err := buildProxyHandler(context.Background(), cfg)
 	if err != nil {
 		logger.Fatalf("proxy bootstrap: %v", err)
 	}
@@ -77,11 +77,12 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	if tracerShutdown != nil {
-		tracerCtx, tracerCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer tracerCancel()
-		if err := tracerShutdown(tracerCtx); err != nil {
-			logger.Printf("tracer shutdown: %v", err)
+	if shutdownHooks != nil {
+		// shutdownHooks stops the policy hot-watcher (if any) and flushes the tracer.
+		hookCtx, hookCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer hookCancel()
+		if err := shutdownHooks(hookCtx); err != nil {
+			logger.Printf("shutdown hooks: %v", err)
 		}
 	}
 
