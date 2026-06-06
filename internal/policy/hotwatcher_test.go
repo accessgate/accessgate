@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"sync"
 	"testing"
 	"time"
 )
@@ -28,13 +29,22 @@ func quietLogger() *log.Logger {
 // returned setMod function, so reloads can be driven deterministically without touching
 // the real clock or filesystem mtime resolution.
 func newWatcherWithFakeStat(initial Engine, reload ReloadFunc) (*HotWatcher, func(time.Time)) {
+	var mu sync.Mutex // guards cur: read by w.stat (watcher goroutine), written by setMod (test goroutine)
 	cur := time.Unix(1000, 0)
 	w := NewHotWatcher("fake.wasm", time.Second, initial, reload, quietLogger())
-	w.stat = func(string) (time.Time, error) { return cur, nil }
+	w.stat = func(string) (time.Time, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		return cur, nil
+	}
 	// Reset lastMod to the seeded value (NewHotWatcher seeded via the default stat,
 	// which errored on the nonexistent path and left lastMod zero).
 	w.lastMod = cur
-	return w, func(t time.Time) { cur = t }
+	return w, func(t time.Time) {
+		mu.Lock()
+		defer mu.Unlock()
+		cur = t
+	}
 }
 
 func TestHotWatcherNoChangeNoReload(t *testing.T) {
