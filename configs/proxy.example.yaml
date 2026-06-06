@@ -8,6 +8,7 @@ require_auth: true
 auth_url: "https://auth.example.com"
 cookie_name: "__Host-ess_session"
 http_port: "8081"
+grpc_listen_addr: ""  # e.g. ":9091" to enable the optional proxy gRPC authz server; empty disables it
 policy_engine: "wasm"
 policy_bundle_path: ""
 policy_fallback_allow: true

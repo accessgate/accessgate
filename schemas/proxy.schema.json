@@ -17,6 +17,9 @@
     "cookie_name": {
       "type": "string"
     },
+    "grpc_listen_addr": {
+      "type": "string"
+    },
     "headers_admin_role": {
       "type": "string"
     },
@@ -103,6 +106,7 @@
     "auth_url",
     "cookie_name",
     "http_port",
+    "grpc_listen_addr",
     "policy_engine",
     "policy_bundle_path",
     "policy_fallback_allow",

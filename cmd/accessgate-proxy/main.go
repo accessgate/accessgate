@@ -19,7 +19,7 @@ func main() {
 		logger.Fatalf("config load: %v", err)
 	}
 
-	handler, tracerShutdown, err := buildProxyHandler(context.Background(), cfg)
+	handler, engine, tracerShutdown, err := buildProxyHandler(context.Background(), cfg)
 	if err != nil {
 		logger.Fatalf("proxy bootstrap: %v", err)
 	}
@@ -35,6 +35,19 @@ func main() {
 		}
 	}()
 
+	// Optional gRPC server (enabled when grpc_listen_addr is set). It shares the
+	// authz engine with the HTTP server and installs the AccessGate authz
+	// interceptors on every call.
+	grpcSrv := newGRPCServer(engine)
+	grpcEnabled := cfg.GRPCListenAddr != ""
+	if grpcEnabled {
+		lis, err := startGRPCServer(grpcSrv, cfg.GRPCListenAddr)
+		if err != nil {
+			logger.Fatalf("grpc listen %q: %v", cfg.GRPCListenAddr, err)
+		}
+		logger.Printf("grpc server listening on %s", lis.Addr().String())
+	}
+
 	sigCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -49,6 +62,22 @@ func main() {
 		defer tracerCancel()
 		if err := tracerShutdown(tracerCtx); err != nil {
 			logger.Printf("tracer shutdown: %v", err)
+		}
+	}
+
+	if grpcEnabled {
+		// GracefulStop blocks until in-flight RPCs complete. Bound it by the
+		// shutdown deadline by racing against a hard Stop.
+		done := make(chan struct{})
+		go func() {
+			grpcSrv.GracefulStop()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-shutdownCtx.Done():
+			logger.Printf("grpc graceful shutdown timed out; forcing stop")
+			grpcSrv.Stop()
 		}
 	}
 

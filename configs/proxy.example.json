@@ -5,6 +5,7 @@
   "auth_url": "http://localhost:8080",
   "cookie_name": "__Host-ess_session",
   "http_port": "8081",
+  "grpc_listen_addr": "",
   "policy_engine": "wasm",
   "policy_bundle_path": "",
   "policy_fallback_allow": true,

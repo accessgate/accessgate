@@ -25,16 +25,16 @@ func loadConfig() (*config.Config, error) {
 	return config.Load(context.Background(), configPath)
 }
 
-func buildProxyHandler(ctx context.Context, cfg *config.Config) (http.Handler, func(context.Context) error, error) {
+func buildProxyHandler(ctx context.Context, cfg *config.Config) (http.Handler, pkgproxy.Engine, func(context.Context) error, error) {
 	client := proxy.NewAuthClient(cfg.AuthURL, cfg.CookieName)
 
 	reg := plugin.New()
 	if err := (&register.Registrar{}).RegisterBuiltins(ctx, reg); err != nil {
-		return nil, nil, fmt.Errorf("register built-in plugins: %w", err)
+		return nil, nil, nil, fmt.Errorf("register built-in plugins: %w", err)
 	}
 	if cfg.PluginsManifestDir != "" {
 		if err := discoverManifests(ctx, cfg, reg); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 
@@ -42,11 +42,11 @@ func buildProxyHandler(ctx context.Context, cfg *config.Config) (http.Handler, f
 	tracer, tracerShutdown := observability.NewOTLPTracerFromEnvWithShutdown()
 	policyEngine, err := buildPolicyEngine(cfg)
 	if err != nil {
-		return nil, nil, fmt.Errorf("policy engine: %w", err)
+		return nil, nil, nil, fmt.Errorf("policy engine: %w", err)
 	}
 	pipelinePlugins, err := buildPipelinePlugins(ctx, cfg, reg)
 	if err != nil {
-		return nil, nil, fmt.Errorf("pipeline plugins: %w", err)
+		return nil, nil, nil, fmt.Errorf("pipeline plugins: %w", err)
 	}
 
 	engine := &pkgproxy.DefaultEngine{
@@ -60,7 +60,7 @@ func buildProxyHandler(ctx context.Context, cfg *config.Config) (http.Handler, f
 	}
 
 	handler := httpserver.New(cfg, engine, reg, metricsHandler).Handler()
-	return handler, tracerShutdown, nil
+	return handler, engine, tracerShutdown, nil
 }
 
 // manifestLogger is used for non-fatal manifest discovery diagnostics. It is a package var
