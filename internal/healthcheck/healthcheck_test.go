@@ -18,7 +18,7 @@ func newServerOnLoopback(t *testing.T, h http.Handler) (port string) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	srv.Listener.Close()
+	_ = srv.Listener.Close()
 	srv.Listener = l
 	srv.Start()
 	t.Cleanup(srv.Close)
@@ -66,7 +66,7 @@ func TestRun_ConnectionRefused(t *testing.T) {
 		t.Fatalf("listen: %v", err)
 	}
 	_, port, _ := net.SplitHostPort(l.Addr().String())
-	l.Close()
+	_ = l.Close()
 
 	t.Setenv("TEST_HC_PORT", port)
 	if err := Run("TEST_HC_PORT", "0", "/healthz"); err == nil {
