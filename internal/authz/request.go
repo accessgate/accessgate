@@ -9,7 +9,10 @@ type Request struct {
 	Cookies          map[string]string
 	Body             []byte
 	GraphQLOperation string
-	GRPCService      string
-	GRPCMethod       string
-	RemoteAddr       string // TCP remote address (IP:port) — used by rate-limiter trusted-proxy logic
+	// GraphQLOperationType is "query", "mutation", or "subscription" when the
+	// request body is a recognizable GraphQL document; otherwise "".
+	GraphQLOperationType string
+	GRPCService          string
+	GRPCMethod           string
+	RemoteAddr           string // TCP remote address (IP:port) — used by rate-limiter trusted-proxy logic
 }

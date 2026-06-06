@@ -3,6 +3,8 @@ package authz
 import (
 	"encoding/json"
 	"strings"
+
+	"github.com/accessgate/accessgate/internal/graphql"
 )
 
 // NormalizeRequest builds a proxy Request from raw HTTP/gRPC data.
@@ -27,6 +29,15 @@ func NormalizeRequest(protocol, method, path string, headers, cookies map[string
 		}
 		if _ = json.Unmarshal(body, &gql); gql.OperationName != "" {
 			req.GraphQLOperation = gql.OperationName
+		}
+	}
+	// Fallback: when neither the header nor a JSON operationName supplied a
+	// name, but the body is a raw GraphQL document (e.g. "query GetUser { ... }"),
+	// extract the operation name (and type) directly from the document.
+	if req.GraphQLOperation == "" && len(body) > 0 {
+		if name, opType := graphql.ExtractOperation(body); name != "" || opType != "" {
+			req.GraphQLOperation = name
+			req.GraphQLOperationType = opType
 		}
 	}
 	// gRPC: :path is like /package.Service/Method or X-Grpc-Service / X-Grpc-Method
