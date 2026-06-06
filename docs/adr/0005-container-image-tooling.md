@@ -54,7 +54,9 @@ Concrete shape:
 - **Tag-driven publish**: images are built and pushed by the GoReleaser `release` job on a
   `v*` tag (same trigger as today's archives), authenticating to GHCR with the workflow's
   token; tags follow the release version plus a moving `latest`.
-- **Image signing / SBOM / provenance are deferred to #45** — out of scope here.
+- **Image signing / SBOM / provenance** were deferred to #45 — **now implemented**:
+  the release pipeline produces SBOMs, keyless cosign signatures (checksums file and
+  images), and SLSA build provenance. See [RELEASING](../RELEASING.md#supply-chain-artifacts-and-verification).
 
 ## Consequences
 
@@ -79,4 +81,5 @@ Concrete shape:
     have largely absorbed.
 - **Follow-up**: implementing the Dockerfiles + GoReleaser `dockers:`/`docker_manifests:`
   wiring and the GHCR-publish CI steps is tracked under the container-images work item (#77);
-  image signing/provenance under #45.
+  image signing/SBOM/provenance (#45) has since been implemented on top of this pipeline
+  (keyless cosign + syft SBOMs + SLSA provenance, GitHub OIDC).
