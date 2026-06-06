@@ -1,0 +1,54 @@
+# syntax=docker/dockerfile:1
+#
+# Multi-stage build for the accessgate-proxy service (ADR-0005).
+#
+#   builder: golang:1.26.4 — compiles a static, CGO-free binary.
+#   final:   gcr.io/distroless/static:nonroot — no shell, no package manager,
+#            runs as the non-root "nonroot" user.
+#
+# The build is pure-Go (no cgo) with proto/gen committed, so a plain
+# `go build ./cmd/accessgate-proxy` works from a clean checkout. This file is
+# self-contained: `docker build -f build/docker/Dockerfile.proxy .` from the
+# repo root produces a runnable image without GoReleaser.
+#
+# Cross-compilation uses the BuildKit-provided TARGETOS/TARGETARCH so a single
+# `docker buildx build --platform linux/amd64,linux/arm64` (as GoReleaser
+# drives in CI) yields both architectures from one amd64 builder, with no QEMU
+# emulation of the compiler.
+
+# --- builder ---------------------------------------------------------------
+FROM --platform=$BUILDPLATFORM golang:1.26.4 AS builder
+
+WORKDIR /src
+
+# Cache module downloads separately from the source for faster rebuilds.
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+ARG TARGETOS
+ARG TARGETARCH
+ENV CGO_ENABLED=0
+RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags="-s -w" \
+    -o /out/accessgate-proxy ./cmd/accessgate-proxy
+
+# --- final -----------------------------------------------------------------
+FROM gcr.io/distroless/static:nonroot
+
+COPY --from=builder /out/accessgate-proxy /usr/local/bin/accessgate-proxy
+
+# Non-root by default (distroless "nonroot" user, uid 65532).
+USER nonroot:nonroot
+
+# accessgate-proxy default HTTP port (internal/proxy/config: http_port=8081).
+EXPOSE 8081
+
+# Shell-less liveness probe: the binary's own "healthcheck" subcommand performs
+# an HTTP GET to 127.0.0.1:${HTTP_PORT:-8081}/healthz and exits 0/1. distroless
+# has no curl/wget/shell, so this is the supported in-container check.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD ["/usr/local/bin/accessgate-proxy", "healthcheck"]
+
+ENTRYPOINT ["/usr/local/bin/accessgate-proxy"]

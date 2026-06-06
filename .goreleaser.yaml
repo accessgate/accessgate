@@ -1,4 +1,6 @@
-# Minimal GoReleaser config for accessgate (binaries only; Docker images via separate workflow).
+# GoReleaser config for accessgate: OS/arch archives plus multi-arch container
+# images (ADR-0005). Images are built from the checked-in multi-stage
+# Dockerfiles in build/docker/ and published to GHCR on v* tags.
 version: 2
 
 project_name: accessgate
@@ -17,14 +19,148 @@ builds:
 
 archives:
   - id: default
-    format: tar.gz
+    formats: [tar.gz]
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 checksum:
   name_template: "checksums.txt"
+
+# Container images, one per binary, built per-arch from the multi-stage
+# Dockerfiles and joined into a single multi-arch manifest below.
+#
+# The Dockerfiles build from source (golang:1.26.4 -> distroless/static:nonroot)
+# using BuildKit TARGETOS/TARGETARCH, so each per-arch image is produced via
+# `docker buildx build --platform linux/<arch>`. dockerfile/use=buildx requires
+# buildx + QEMU set up in the release job (see .github/workflows/ci.yaml).
+dockers:
+  # --- accessgate-auth ---
+  - id: auth-amd64
+    use: buildx
+    goos: linux
+    goarch: amd64
+    dockerfile: build/docker/Dockerfile.auth
+    # The Dockerfile builds from source, but GoReleaser's docker build context
+    # contains only prebuilt binaries by default. extra_files copies the source
+    # trees `go build ./cmd/...` needs into the context so the builder stage can
+    # compile. (proto/gen is committed, so no codegen is required at image time.)
+    extra_files:
+      - go.mod
+      - go.sum
+      - cmd
+      - internal
+      - pkg
+      - proto
+    image_templates:
+      - "ghcr.io/accessgate/accessgate-auth:{{ .Version }}-amd64"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.title=accessgate-auth"
+      - "--label=org.opencontainers.image.description=AccessGate auth service"
+      - "--label=org.opencontainers.image.source=https://github.com/accessgate/accessgate"
+      - "--label=org.opencontainers.image.url=https://github.com/accessgate/accessgate"
+      - "--label=org.opencontainers.image.documentation=https://github.com/accessgate/accessgate"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+  - id: auth-arm64
+    use: buildx
+    goos: linux
+    goarch: arm64
+    dockerfile: build/docker/Dockerfile.auth
+    extra_files:
+      - go.mod
+      - go.sum
+      - cmd
+      - internal
+      - pkg
+      - proto
+    image_templates:
+      - "ghcr.io/accessgate/accessgate-auth:{{ .Version }}-arm64"
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.title=accessgate-auth"
+      - "--label=org.opencontainers.image.description=AccessGate auth service"
+      - "--label=org.opencontainers.image.source=https://github.com/accessgate/accessgate"
+      - "--label=org.opencontainers.image.url=https://github.com/accessgate/accessgate"
+      - "--label=org.opencontainers.image.documentation=https://github.com/accessgate/accessgate"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+  # --- accessgate-proxy ---
+  - id: proxy-amd64
+    use: buildx
+    goos: linux
+    goarch: amd64
+    dockerfile: build/docker/Dockerfile.proxy
+    extra_files:
+      - go.mod
+      - go.sum
+      - cmd
+      - internal
+      - pkg
+      - proto
+    image_templates:
+      - "ghcr.io/accessgate/accessgate-proxy:{{ .Version }}-amd64"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.title=accessgate-proxy"
+      - "--label=org.opencontainers.image.description=AccessGate proxy service"
+      - "--label=org.opencontainers.image.source=https://github.com/accessgate/accessgate"
+      - "--label=org.opencontainers.image.url=https://github.com/accessgate/accessgate"
+      - "--label=org.opencontainers.image.documentation=https://github.com/accessgate/accessgate"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+  - id: proxy-arm64
+    use: buildx
+    goos: linux
+    goarch: arm64
+    dockerfile: build/docker/Dockerfile.proxy
+    extra_files:
+      - go.mod
+      - go.sum
+      - cmd
+      - internal
+      - pkg
+      - proto
+    image_templates:
+      - "ghcr.io/accessgate/accessgate-proxy:{{ .Version }}-arm64"
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.title=accessgate-proxy"
+      - "--label=org.opencontainers.image.description=AccessGate proxy service"
+      - "--label=org.opencontainers.image.source=https://github.com/accessgate/accessgate"
+      - "--label=org.opencontainers.image.url=https://github.com/accessgate/accessgate"
+      - "--label=org.opencontainers.image.documentation=https://github.com/accessgate/accessgate"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+
+# Multi-arch manifests joining the per-arch images, plus a moving "latest".
+docker_manifests:
+  - name_template: "ghcr.io/accessgate/accessgate-auth:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/accessgate/accessgate-auth:{{ .Version }}-amd64"
+      - "ghcr.io/accessgate/accessgate-auth:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/accessgate/accessgate-auth:latest"
+    image_templates:
+      - "ghcr.io/accessgate/accessgate-auth:{{ .Version }}-amd64"
+      - "ghcr.io/accessgate/accessgate-auth:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/accessgate/accessgate-proxy:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/accessgate/accessgate-proxy:{{ .Version }}-amd64"
+      - "ghcr.io/accessgate/accessgate-proxy:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/accessgate/accessgate-proxy:latest"
+    image_templates:
+      - "ghcr.io/accessgate/accessgate-proxy:{{ .Version }}-amd64"
+      - "ghcr.io/accessgate/accessgate-proxy:{{ .Version }}-arm64"
 
 snapshot:
   version_template: "{{ incpatch .Version }}-next"

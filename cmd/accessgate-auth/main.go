@@ -14,6 +14,7 @@ import (
 	"github.com/accessgate/accessgate/internal/auth/config"
 	"github.com/accessgate/accessgate/internal/auth/httpserver"
 	"github.com/accessgate/accessgate/internal/auth/service"
+	"github.com/accessgate/accessgate/internal/healthcheck"
 	"github.com/accessgate/accessgate/internal/plugin"
 	"github.com/accessgate/accessgate/internal/plugins/register"
 	"github.com/accessgate/accessgate/internal/redis"
@@ -23,6 +24,17 @@ import (
 )
 
 func main() {
+	// "healthcheck" subcommand: used as the in-container Docker HEALTHCHECK on
+	// the shell-less distroless image. It performs a single GET to /healthz and
+	// exits 0/1. Must run before any config load so it stays self-contained.
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		if err := healthcheck.Run("HTTP_PORT", "8080", "/healthz"); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	logger := log.New(os.Stdout, "[accessgate-auth] ", log.LstdFlags|log.LUTC)
 	logger.Println("starting accessgate-auth")
 
