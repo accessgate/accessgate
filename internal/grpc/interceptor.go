@@ -117,6 +117,10 @@ func StreamServerInterceptor(engine authz.Engine) grpc.StreamServerInterceptor {
 		if resp == nil || !resp.Allow {
 			return statusFromResponse(resp)
 		}
-		return handler(srv, ss)
+		// Carry the authz identity headers (e.g. X-User-Id, Authorization) to the
+		// downstream handler/director via a stream wrapper so they can be injected
+		// as outbound gRPC metadata on a forwarded upstream call.
+		wrapped := NewAuthorizedStream(ss, resp.UpstreamHeaders)
+		return handler(srv, wrapped)
 	}
 }
