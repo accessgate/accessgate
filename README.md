@@ -139,11 +139,16 @@ Use `AUTH_CONFIG` / `PROXY_CONFIG` (or `CONFIG_PATH`) for config file paths. The
 
 ## Configuration
 
-For production:
+For production, follow the supported **[Production profile](docs/SECURITY-POSTURE.md#5-production-profile-supported-10-stance)**
+(signed policy bundles + plugin manifests required, `cookie_secure: true`,
+fail-closed policy fallback, managed-endpoint Redis HA). In summary:
 
 - Set IdP issuer/client credentials via secure secret management
-- Configure cookie/session settings for your domain and TLS posture
+- Configure cookie/session settings for your domain and TLS posture (`cookie_secure: true`)
 - Set explicit upstream allowlists and timeout limits
+- Require signed policy bundles (`bundle_public_key_path`) and signed plugin
+  manifests (`plugins_manifest_public_key_path`)
+- Keep `policy_fallback_allow` unset/false (fail closed)
 - Enable observability (metrics/tracing/log correlation)
 
 ---
@@ -186,12 +191,17 @@ If you are upgrading from older **PolicyFront**-named artifacts and telemetry:
 ## Security
 
 Please report vulnerabilities privately via your security contact channel before public disclosure.
+See [SECURITY.md](SECURITY.md) for the disclosure process and
+[docs/SECURITY-POSTURE.md](docs/SECURITY-POSTURE.md) for the code-grounded v1.0
+posture, including the supported
+[Production profile](docs/SECURITY-POSTURE.md#5-production-profile-supported-10-stance).
 
 Recommended hardening:
 
 - Use HTTPS everywhere
 - Restrict callback/redirect URLs
-- Enforce strict session cookie settings
+- Enforce strict session cookie settings (`cookie_secure: true`)
+- Require signed policy bundles and signed plugin manifests in production
 - Monitor auth and policy decision telemetry
 
 ---

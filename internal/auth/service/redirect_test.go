@@ -45,6 +45,23 @@ func TestValidateRedirect_PathAllowed(t *testing.T) {
 	}
 }
 
+func TestValidateRedirect_ProtocolRelativeRejected(t *testing.T) {
+	// Browsers treat "//host" and "/\host" as absolute URLs to another host.
+	// A leading-slash-only check would let these through as "local paths"
+	// (CWE-601 open redirect); they must be rejected.
+	cases := []string{
+		"//evil.example.com/steal",
+		"/\\evil.example.com/steal",
+		"//evil.example.com",
+	}
+	for _, target := range cases {
+		result := ValidateRedirect(target, "https://app.example.com", nil, []string{"/"})
+		if result != "" {
+			t.Errorf("protocol-relative redirect %q must be rejected, got %q", target, result)
+		}
+	}
+}
+
 func TestValidateRedirect_FileSchemeRejected(t *testing.T) {
 	allowedOrigins := []string{"*"}
 	result := ValidateRedirect("file:///etc/passwd", "https://app.example.com", allowedOrigins, nil)

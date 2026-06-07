@@ -79,6 +79,52 @@ jobs:
         uses: github/codeql-action/autobuild@v4
 
       - name: Perform CodeQL Analysis
+        id: codeql
         uses: github/codeql-action/analyze@v4
         with:
           category: "/language:go"
+          # Emit the SARIF locally (in addition to uploading to the dashboard)
+          # so the gate step below can inspect result severities.
+          output: codeql-results
+
+      # Gate: fail the build on error-level CodeQL findings, keep warning/note
+      # findings informational (they still surface on the code-scanning
+      # dashboard via the upload above). "error" is CodeQL's highest result
+      # level and corresponds to its security-critical/high default-severity
+      # queries; we deliberately do not gate on warnings to avoid blocking PRs
+      # on lower-confidence or stylistic results.
+      - name: Gate on error-level CodeQL findings
+        if: always() && steps.codeql.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          sarif_files=(codeql-results/*.sarif)
+          if [ ${#sarif_files[@]} -eq 0 ]; then
+            echo "::error::No CodeQL SARIF produced; cannot evaluate the security gate."
+            exit 1
+          fi
+          errors=0
+          for f in "${sarif_files[@]}"; do
+            # Count results whose effective level is "error". CodeQL writes the
+            # level on the result; when omitted it defaults to the rule's
+            # configured default level (defaultConfiguration.level), so resolve
+            # that fallback before comparing.
+            level_errors=$(jq '
+              [ .runs[]
+                | . as $run
+                | ( [ $run.tool.driver.rules[]?
+                      | { (.id): (.defaultConfiguration.level // "warning") } ]
+                    | add // {} ) as $defaults
+                | .results[]?
+                | ( .level // $defaults[.ruleId] // "warning" )
+                | select(. == "error")
+              ] | length' "$f")
+            echo "::notice::$(basename "$f"): ${level_errors} error-level CodeQL result(s)."
+            errors=$((errors + level_errors))
+          done
+          if [ "$errors" -gt 0 ]; then
+            echo "::error::CodeQL found ${errors} error-level finding(s). See the Security > Code scanning dashboard. Failing the build."
+            exit 1
+          fi
+          echo "No error-level CodeQL findings. Gate passed."
