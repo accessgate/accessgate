@@ -13,17 +13,22 @@ import (
 
 const maxJWKSBytes = 512 * 1024 // 512 KB
 
-// Metrics captures optional JWKS cache metrics.
+// Metrics captures optional JWKS cache metrics. It is intentionally a minimal,
+// consumer-defined interface so that pkg/token does not depend on pkg/observability;
+// observability.Metrics (a superset) structurally satisfies it. Callers that have an
+// observability.Metrics can pass it directly to NewHTTPJWKSSource.
 type Metrics interface {
 	JWKSCacheHit(issuer string)
 	JWKSCacheMiss(issuer string)
 }
 
-// NopMetrics is a no-op Metrics implementation.
-type NopMetrics struct{}
+// nopMetrics is a no-op Metrics implementation used internally when no metrics
+// sink is supplied. External callers pass their own Metrics (or nil) — there is
+// no need to expose a no-op impl here, so it is unexported.
+type nopMetrics struct{}
 
-func (NopMetrics) JWKSCacheHit(string)  {}
-func (NopMetrics) JWKSCacheMiss(string) {}
+func (nopMetrics) JWKSCacheHit(string)  {}
+func (nopMetrics) JWKSCacheMiss(string) {}
 
 // HTTPJWKSSource fetches JWKS from the OIDC issuer (via discovery) with an in-memory cache.
 type HTTPJWKSSource struct {
@@ -49,7 +54,7 @@ func NewHTTPJWKSSource(cacheTTL time.Duration, metrics Metrics) *HTTPJWKSSource 
 		cacheTTL = 5 * time.Minute
 	}
 	if metrics == nil {
-		metrics = NopMetrics{}
+		metrics = nopMetrics{}
 	}
 	return &HTTPJWKSSource{
 		client:  &http.Client{Timeout: 10 * time.Second},

@@ -12,7 +12,9 @@ type Tracer interface {
 	StartSpan(ctx context.Context, name string, keyvals ...any) (context.Context, Span)
 }
 
-// NopTracer does not record spans.
+// NopTracer does not record spans. It is intended public surface: a no-op Tracer
+// implementation usable by external integrators and as the default when tracing is
+// not configured (see NewOTLPTracerFromEnvWithShutdown). Its span type is unexported.
 type NopTracer struct{}
 
 type nopSpan struct{}

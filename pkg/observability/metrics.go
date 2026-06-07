@@ -26,7 +26,8 @@ type Metrics interface {
 	LogoutCompleted()
 }
 
-// NopMetrics discards all metrics.
+// NopMetrics discards all metrics. It is intended public surface: a no-op Metrics
+// implementation that external integrators (and tests) can use as a default sink.
 type NopMetrics struct{}
 
 // AuthDecision implements Metrics.

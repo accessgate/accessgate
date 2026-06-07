@@ -19,9 +19,12 @@ var (
 	ErrDecrypt = errors.New("cookie: decrypt failed")
 )
 
-// Encrypt encrypts plaintext with AES-256-GCM. key is used to derive a 32-byte key via SHA-256 if needed.
+// encrypt encrypts plaintext with AES-256-GCM. key is used to derive a 32-byte key via SHA-256 if needed.
 // Output format: nonce (12 bytes) || ciphertext || tag (16 bytes).
-func Encrypt(plaintext []byte, key []byte) ([]byte, error) {
+//
+// This is an internal crypto primitive consumed only by the codec; callers should
+// use the high-level EncodeValue/DecodeValue (or the Codec/Manager types) instead.
+func encrypt(plaintext []byte, key []byte) ([]byte, error) {
 	if len(plaintext) == 0 {
 		return nil, nil
 	}
@@ -41,8 +44,11 @@ func Encrypt(plaintext []byte, key []byte) ([]byte, error) {
 	return aead.Seal(nonce, nonce, plaintext, nil), nil
 }
 
-// Decrypt decrypts ciphertext produced by Encrypt. key must match the one used to encrypt.
-func Decrypt(ciphertext []byte, key []byte) ([]byte, error) {
+// decrypt decrypts ciphertext produced by encrypt. key must match the one used to encrypt.
+//
+// This is an internal crypto primitive consumed only by the codec; callers should
+// use the high-level EncodeValue/DecodeValue (or the Codec/Manager types) instead.
+func decrypt(ciphertext []byte, key []byte) ([]byte, error) {
 	if len(ciphertext) <= aesGCMNonceSize+aesGCMTagSize {
 		return nil, ErrDecrypt
 	}
