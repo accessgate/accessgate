@@ -240,9 +240,16 @@ guarded by review discipline alone.
 Concrete, optional-but-recommended items to resolve before tagging v1.0. None are
 code changes mandated by this doc; they are decisions to lock deliberately.
 
-- [ ] **Config:** confirm final names/semantics for the foot-gun keys
+- [x] **Config:** confirmed final names/semantics for the foot-gun keys
   `allow_private_upstreams`, `grpc_upstream_insecure`, and the nullable-bool
-  `policy_fallback_allow`; once frozen, names are permanent.
+  `policy_fallback_allow` (#101). Decisions: keep `allow_private_upstreams` and
+  `grpc_upstream_insecure` as-is — names are clear and both are safe-by-default
+  (SSRF validation on, TLS on). `policy_fallback_allow` retyped from `*bool`
+  (nullable) to `FlexibleBool`: the nullability was load-bearing nowhere
+  (`ApplyDefaults` collapsed `nil`→`false`), and the zero value is already
+  fail-closed (deny). The closed JSON Schema type (`boolean`) is unchanged, so
+  this is not a schema-breaking change. The dead `session_enrichment_api` auth key
+  was also removed before freeze (never read by any code).
 - [ ] **Config:** record `AGENT_CONFIG` / `BINARY=agent` explicitly as
   "deprecated, removal in v2.0" (already aliased; just make the lifecycle
   explicit).

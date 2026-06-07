@@ -29,6 +29,5 @@ allowed_redirect_paths: ["/"]
 http_port: "8080"
 admin_secret: ""  # set via ADMIN_SECRET env var; empty disables /admin and internal session endpoints
 post_login_webhook_url: ""
-session_enrichment_api: ""
 cors_allowed_origins: []
 provider_plugin_id: ""  # empty uses built-in OIDC from this config

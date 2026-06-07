@@ -120,9 +120,10 @@ backward compatibility (`internal/proxy/config/config.go`). See
   (`internal/authz/engine.go`, "Strip CRLF to prevent header injection").
 - **Policy fail-closed default.** `policy_fallback_allow` defaults to **deny** — when
   no policy is loaded or evaluation fails, the request is denied with `503` unless an
-  operator explicitly opts into allow (`internal/proxy/config/config.go`
-  `ApplyDefaults`, `PolicyFallbackAllow` defaults to `false`;
-  `internal/authz/engine.go` defaults an unset decision to deny/`503`).
+  operator explicitly opts into allow. `PolicyFallbackAllow` is fail-closed by its zero
+  value: an unset/empty key is equivalent to `false` (deny)
+  (`internal/proxy/config/config.go`; `internal/authz/engine.go` defaults an unset
+  decision to deny/`503`).
 - **Request body cap.** Inbound bodies are capped at 32 MB via
   `http.MaxBytesReader` (`internal/authz/http.go` `RequestFromHTTP`).
 - **Session/cookie hardening.** Session cookies carry only an opaque session ID,

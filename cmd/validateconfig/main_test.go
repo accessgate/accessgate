@@ -32,7 +32,6 @@ const validAuthConfigJSON = `{
   "http_port": "8080",
   "admin_secret": "",
   "post_login_webhook_url": "",
-  "session_enrichment_api": "",
   "cors_allowed_origins": [],
   "provider_plugin_id": ""
 }`
@@ -106,7 +105,6 @@ func TestRunRejectsUnknownFieldBySchema(t *testing.T) {
   "http_port": "8080",
   "admin_secret": "",
   "post_login_webhook_url": "",
-  "session_enrichment_api": "",
   "cors_allowed_origins": [],
   "provider_plugin_id": "",
   "unknown_key": "nope"

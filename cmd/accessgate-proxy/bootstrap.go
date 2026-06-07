@@ -125,7 +125,7 @@ func discoverManifests(ctx context.Context, cfg *config.Config, reg *plugin.Regi
 // (re-verifying the signature, fail-closed to last-good). The returned stop function is
 // non-nil only when a watcher was started; callers must invoke it on shutdown.
 func buildPolicyEngine(ctx context.Context, cfg *config.Config) (policy.Engine, func(), error) {
-	fallback := policy.FallbackConfig{Allow: cfg.PolicyFallbackAllow != nil && *cfg.PolicyFallbackAllow}
+	fallback := policy.FallbackConfig{Allow: bool(cfg.PolicyFallbackAllow)}
 
 	switch cfg.PolicyEngine {
 	case config.PolicyEngineWASM:

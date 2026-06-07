@@ -80,9 +80,6 @@
     "redis_url": {
       "type": "string"
     },
-    "session_enrichment_api": {
-      "type": "string"
-    },
     "session_pkce_ttl_seconds": {
       "type": "integer"
     },
@@ -125,7 +122,6 @@
     "http_port",
     "admin_secret",
     "post_login_webhook_url",
-    "session_enrichment_api",
     "cors_allowed_origins",
     "provider_plugin_id"
   ],

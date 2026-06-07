@@ -138,10 +138,7 @@ func TestPolicyFallbackAllowDefaultsDeny(t *testing.T) {
 	}
 	c.ApplyDefaults()
 
-	if c.PolicyFallbackAllow == nil {
-		t.Fatal("PolicyFallbackAllow should be set by ApplyDefaults")
-	}
-	if *c.PolicyFallbackAllow {
+	if c.PolicyFallbackAllow {
 		t.Error("PolicyFallbackAllow should default to false (deny), not true")
 	}
 }

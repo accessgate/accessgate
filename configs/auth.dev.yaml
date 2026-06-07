@@ -25,5 +25,4 @@ allowed_redirect_origins: ["http://localhost:3000", "http://localhost:8080"]
 allowed_redirect_paths: ["/", "/dashboard"]
 http_port: "8080"
 post_login_webhook_url: ""
-session_enrichment_api: ""
 cors_allowed_origins: ["http://localhost:3000"]
