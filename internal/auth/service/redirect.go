@@ -13,7 +13,16 @@ func ValidateRedirect(redirectTo string, baseURL string, allowedOrigins, allowed
 		return baseURL
 	}
 	// If it's a path (starts with /), validate and make it absolute using baseURL.
+	//
+	// Reject protocol-relative / backslash-prefixed forms ("//host", "/\host")
+	// up front: browsers interpret a leading "//" or "/\" as an absolute URL to
+	// another host, so treating them as local paths would be an open redirect
+	// (CWE-601). A leading-slash check alone is insufficient — the second
+	// character must not be '/' or '\'.
 	if strings.HasPrefix(redirectTo, "/") {
+		if len(redirectTo) > 1 && (redirectTo[1] == '/' || redirectTo[1] == '\\') {
+			return ""
+		}
 		pathAllowed := len(allowedPathPrefixes) == 0
 		for _, p := range allowedPathPrefixes {
 			if p == "/" || strings.HasPrefix(redirectTo, p) {

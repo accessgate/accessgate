@@ -175,6 +175,14 @@ proxy:
   httpPort: 8081
 
   # Config (docs/CONFIG-KEYS.md → accessgate-proxy).
+  #
+  # PRODUCTION PROFILE (docs/SECURITY-POSTURE.md §5): the supported v1.0 stance
+  # requires signed policy bundles (bundle_public_key_path) and signed plugin
+  # manifests (plugins_manifest_public_key_path) — set these via extraEnv
+  # (BUNDLE_PUBLIC_KEY_PATH / PLUGINS_MANIFEST_PUBLIC_KEY_PATH) and mount the
+  # keys — keeps policyFallbackAllow=false, requires cookieSecure=true on the
+  # auth side, and leaves allowPrivateUpstreams / grpc.upstreamInsecure unset
+  # unless explicitly justified.
   config:
     # Core. upstream_url is REQUIRED. auth_url is REQUIRED but defaults to the
     # in-cluster auth Service when left empty (see proxy deployment template).

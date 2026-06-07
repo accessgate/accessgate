@@ -146,6 +146,13 @@ services:
       REQUIRE_AUTH: "${REQUIRE_AUTH:-false}"
       # Use the Rego engine with the mounted sample bundle. Fallback is deny
       # (fail-closed) if the policy fails to load.
+      #
+      # PRODUCTION PROFILE (docs/SECURITY-POSTURE.md §5): a supported production
+      # deployment additionally requires signed artifacts —
+      # BUNDLE_PUBLIC_KEY_PATH (WASM policy bundle) and
+      # PLUGINS_MANIFEST_PUBLIC_KEY_PATH (plugin manifests) — keeps
+      # POLICY_FALLBACK_ALLOW false, sets COOKIE_SECURE=true, and does NOT set
+      # ALLOW_PRIVATE_UPSTREAMS. The values below are local-dev-only.
       POLICY_ENGINE: "rego"
       POLICY_BUNDLE_PATH: "/etc/accessgate/policy/sample.rego"
       POLICY_FALLBACK_ALLOW: "false"

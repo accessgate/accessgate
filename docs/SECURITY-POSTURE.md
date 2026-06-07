@@ -20,9 +20,17 @@
   runs as a required step; a new finding fails the build
   (`.github/workflows/security.yml`, `govulncheck` job). The toolchain is pinned
   via `go.mod` so the scan is reproducible.
-- **CodeQL (informational, not blocking).** The `codeql` job analyzes Go and
-  uploads results to the code-scanning dashboard, but a CodeQL alert does **not**
-  fail the build (`.github/workflows/security.yml`, `codeql` job). See [Known gaps](#5-known-gaps--hardening-backlog).
+- **CodeQL (blocking on error-level findings).** The `codeql` job analyzes Go
+  and uploads results to the code-scanning dashboard, **and** gates the build:
+  the analysis writes its SARIF locally (`analyze` step `output:`) and a
+  follow-up step fails the run if any result's effective level is `error`
+  (`.github/workflows/security.yml`, `codeql` job, "Gate on error-level CodeQL
+  findings"). Warning- and note-level findings remain **informational** — they
+  surface on the dashboard but do not block PRs, to avoid gating on
+  lower-confidence or stylistic results. The gate is green on `main` as of this
+  change (the lone error-level finding, `go/bad-redirect-check` in
+  `internal/auth/service/redirect.go`, was fixed by rejecting protocol-relative
+  `//`/`/\` redirect targets).
 - **Weekly rescan.** A `schedule: cron "0 7 * * 1"` re-runs the scans to catch
   newly disclosed CVEs in already-pinned dependencies between code changes.
 
@@ -151,28 +159,65 @@ backward compatibility (`internal/proxy/config/config.go`). See
   (`deploy/helm/accessgate/templates/secret.yaml`, `auth-deployment.yaml`,
   `proxy-deployment.yaml`).
 
-## 5. Known gaps & hardening backlog
+## 5. Production profile (supported 1.0 stance)
+
+Several defenses above are **opt-in** in the code for backward compatibility, but
+are **required** for a supported v1.0 production deployment. "Production profile"
+is the configuration AccessGate is hardened and supported against; running outside
+it is possible but unsupported and at the operator's risk. Treat this section as
+the deployment contract — the install guides, Helm values, and Docker compose
+files reference it.
+
+| Setting | Required production stance | Why |
+| --- | --- | --- |
+| `bundle_public_key_path` | **Set** (WASM policy bundle signing) | Without it the proxy loads **unverified** bundles; only a configured key engages fail-closed Ed25519 verification (§2). |
+| `plugins_manifest_public_key_path` | **Set** (plugin manifest signing) | Without it discovered plugin manifests are **not** signature-checked; with it every manifest must carry a valid Ed25519 signature or discovery fails (§2). Pair with `plugins_manifest_strict: true`. |
+| `cookie_secure` | **`true`** | Forces cookies over HTTPS only. The `__Host-` prefix default enforces `Secure` **for prefixed names only** — a custom (non-`__Host-`) cookie name does **not** get this for free, so set it explicitly (§3). |
+| `policy_fallback_allow` | **unset / `false`** | Keeps the proxy fail-closed (deny + `503`) when no policy is loaded or evaluation fails (§3). Setting it to `true` is a fail-open posture and is unsupported in production. |
+| `allow_private_upstreams` | **unset / `false`** unless explicitly justified | Disables the SSRF IP-range check; intended for local dev. Enable only with a documented justification and compensating network controls (§3). |
+| `grpc_upstream_insecure` | **unset / `false`** unless explicitly justified | Disables TLS to the gRPC upstream. Enable only with a documented justification and a trusted network path. |
+
+**Redis topology.** The supported 1.0 HA topology is a **managed Redis endpoint
+that presents a single stable address and fails over internally** — the client is
+single-endpoint only and is not Sentinel/Cluster-aware
+(`internal/redis/redis.go`). Native Sentinel/Cluster support is a tracked code
+follow-up (**#107**); see [docs/REDIS-HA.md](REDIS-HA.md) for the supported
+operational pattern.
+
+These requirements are also reflected, where trivially doable, in the deployment
+assets ([deployments/docker](../deployments/docker),
+[deploy/helm](../deploy/helm/accessgate)) and summarized in
+[SECURITY.md](../SECURITY.md#operational-hardening-recommendations) and the
+[README](../README.md).
+
+## 6. Known gaps & hardening backlog
 
 Being honest about what is **not** yet covered:
 
 - **Redis client is single-endpoint only.** `internal/redis/redis.go` uses a plain
-  `redis.NewClient` — it is **not** Sentinel-aware and **not** Cluster-aware. HA is
-  only achievable today via a managed Redis that presents one stable endpoint and
-  fails over internally. Sentinel/Cluster support is a code follow-up (see
-  [docs/REDIS-HA.md](REDIS-HA.md)).
-- **CodeQL is informational, not blocking.** Alerts surface on the dashboard but do
-  not fail CI (`.github/workflows/security.yml`). Consider gating on
-  `error`-severity CodeQL results before 1.0.
+  `redis.NewClient` — it is **not** Sentinel-aware and **not** Cluster-aware. For
+  1.0 this is **resolved as a documented stance**: the supported HA topology is a
+  managed Redis that presents one stable endpoint and fails over internally (see
+  the [Production profile](#5-production-profile-supported-10-stance) and
+  [docs/REDIS-HA.md](REDIS-HA.md)). Native Sentinel/Cluster support is a tracked
+  code follow-up (**#107**).
+- **CodeQL gates on error-level findings.** Resolved: the `codeql` job fails the
+  build on any `error`-level result while keeping warning/note findings
+  informational (`.github/workflows/security.yml`; see §1). The gate is green on
+  `main`.
 - **No Go public-API diff gate.** CI gates proto breaking changes (`make
   proto-breaking`) and config-schema drift, but there is no automated check for
   breaking changes to exported Go packages — relevant pre-1.0 where the public API
-  is still settling (`docs/RELEASING.md`).
+  is still settling (`docs/RELEASING.md`). Tracked as a follow-up; not in scope
+  for the 1.0 security-defaults wave.
 - **Image signing/SBOM/provenance only run on tags.** All `#45` supply-chain
   artifacts are produced by the tag-gated `release` job; untagged `main` builds get
   no signatures or attestations (`.github/workflows/ci.yaml`).
-- **Policy/plugin signing is opt-in.** Bundle and manifest verification only engage
-  when the respective public-key paths are configured; the unsigned path remains for
-  backward compatibility. Treat configuring the keys as required for production.
+- **Policy/plugin signing is opt-in *in code*, required *in production*.** Bundle
+  and manifest verification only engage when the respective public-key paths are
+  configured; the unsigned path remains for backward compatibility. For 1.0 this is
+  **resolved as a documented stance** — configuring both keys is **required** in
+  the supported [Production profile](#5-production-profile-supported-10-stance).
 - **Rotate any embedded credentials.** If a token or secret is ever exposed — e.g.
   a PAT embedded in a git remote URL, or any committed credential — revoke and
   rotate it immediately, then scrub it from configs and remotes (see
@@ -185,7 +230,7 @@ Being honest about what is **not** yet covered:
 **Done ✓**
 
 - [x] Blocking `govulncheck` on every push/PR + weekly cron (`security.yml`)
-- [x] CodeQL Go analysis to the code-scanning dashboard (`security.yml`)
+- [x] CodeQL Go analysis to the code-scanning dashboard, **blocking on error-level findings** (`security.yml`)
 - [x] Dependabot for Go modules and GitHub Actions (`dependabot.yml`)
 - [x] Keyless cosign signatures (checksums + images), syft SBOMs, SLSA provenance on `v*` tags (`.goreleaser.yaml`, `ci.yaml`)
 - [x] Documented verification commands (`docs/RELEASING.md`)
@@ -200,10 +245,10 @@ Being honest about what is **not** yet covered:
 - [x] 32 MB request-body cap (`internal/authz/http.go`)
 - [x] Private vulnerability disclosure process (`SECURITY.md`)
 
-**Recommended before / at 1.0**
+**Recommended before / at 1.0** — every item below is resolved (do-or-document):
 
-- [ ] Require `bundle_public_key_path` and `plugins_manifest_public_key_path` in production deployments (and document as such in the install guide)
-- [ ] Decide whether to make CodeQL (error-severity) blocking
-- [ ] Add a Go public-API diff gate to complement the proto/schema gates
-- [ ] Ship Redis Sentinel/Cluster support or formally document managed-endpoint-only HA as the supported topology for 1.0 (#85)
-- [ ] Confirm production deployments set `cookie_secure: true` (the `__Host-` default forces it, but custom cookie names do not)
+- [x] **Documented.** Require `bundle_public_key_path` and `plugins_manifest_public_key_path` in production deployments — stated as required in the [Production profile](#5-production-profile-supported-10-stance) (§5) and reflected in `SECURITY.md`, README, and the Docker/Helm deploy assets.
+- [x] **Done.** CodeQL is now blocking on `error`-level findings (`security.yml`; see §1). Warning-level stays informational.
+- [x] **Documented (deferred).** Go public-API diff gate — explicitly out of scope for the 1.0 security-defaults wave and tracked as a follow-up alongside the existing proto/schema gates (§6).
+- [x] **Documented.** Redis HA — managed-endpoint-only is formally the supported 1.0 topology ([Production profile](#5-production-profile-supported-10-stance) + [docs/REDIS-HA.md](REDIS-HA.md)); native Sentinel/Cluster support tracked as code follow-up **#107**.
+- [x] **Documented.** `cookie_secure: true` is required in the [Production profile](#5-production-profile-supported-10-stance), with the explicit caveat that the `__Host-` prefix forces `Secure` only for prefixed cookie names — custom names must set it.

@@ -42,6 +42,13 @@ released version for production and track release notes.
 
 ## Operational hardening recommendations
 
+> For the **supported v1.0 production stance** — the required settings AccessGate
+> is hardened against (signed policy bundles and plugin manifests,
+> `cookie_secure: true`, fail-closed policy fallback, the supported Redis HA
+> topology, and the escape hatches that need explicit justification) — see the
+> **[Production profile](docs/SECURITY-POSTURE.md#5-production-profile-supported-10-stance)**
+> in the security posture doc.
+
 These reduce risk when running AccessGate:
 
 - **Transport**: terminate everything over HTTPS; restrict OIDC callback/redirect URLs.
