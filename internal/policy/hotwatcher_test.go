@@ -214,16 +214,26 @@ func TestHotWatcherStartStopReloads(t *testing.T) {
 	w.Start(ctx)
 	setMod(time.Unix(2000, 0)) // make the next tick observe a change
 
-	select {
-	case <-reloadCh:
-	case <-time.After(2 * time.Second):
-		t.Fatal("expected background loop to invoke reload after an mtime change")
+	// reloadCh only signals that reload() was invoked; the atomic engine swap
+	// happens after it returns. Poll the served engine until the new policy is
+	// observable (avoids asserting before the swap completes).
+	deadline := time.After(2 * time.Second)
+	for {
+		dec, _ := w.Evaluate(context.Background(), Input{})
+		if dec.Reason == "new" {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("expected background loop to reload and swap to the new engine after an mtime change")
+		case <-time.After(5 * time.Millisecond):
+		}
 	}
 
 	w.Stop()
 	w.Stop() // idempotent
 
-	// After Stop, the new engine should be the one serving.
+	// The new engine should still be the one serving after Stop.
 	dec, _ := w.Evaluate(context.Background(), Input{})
 	if dec.Reason != "new" {
 		t.Fatalf("expected new engine to serve after background reload, got %q", dec.Reason)
