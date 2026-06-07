@@ -133,7 +133,7 @@ The content is written to a ConfigMap, mounted read-only at
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `auth.image.repository` / `proxy.image.repository` | `ghcr.io/accessgate/accessgate-{auth,proxy}` | GHCR images |
+| `auth.image.repository` / `proxy.image.repository` | `ghcr.io/accessgate/accessgate-{auth,proxy}` | GHCR images (canonical; a Docker Hub mirror exists at `docker.io/accessgate/...`) |
 | `auth.image.tag` / `proxy.image.tag` | `""` → `.Chart.AppVersion` | Image tag |
 | `auth.replicaCount` / `proxy.replicaCount` | `2` | Replicas |
 | `auth.config.*` / `proxy.config.*` | see `values.yaml` | Env-mapped config (CONFIG-KEYS.md) |

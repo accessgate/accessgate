@@ -126,16 +126,19 @@ The `CI` workflow (`.github/workflows/ci.yaml`) runs on the tag push. Its jobs:
    to push images to GHCR), checks out the tagged ref, sets up Go, regenerates
    protobuf code (`make proto-generate`), builds, and runs `go test ./... -short`.
    It then sets up **QEMU** and **Docker Buildx** (needed for cross-arch image
-   builds) and logs in to **`ghcr.io`** with the workflow's `GITHUB_TOKEN`, before
-   running GoReleaser:
+   builds), verifies the Docker Hub credentials are present (fail-fast, so a
+   missing secret aborts **before** anything is published), and logs in to both
+   **`ghcr.io`** (with the workflow's `GITHUB_TOKEN`) and **`docker.io`** (with
+   the `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` repo secrets), before running
+   GoReleaser:
 
    ```
    goreleaser release --clean
    ```
 
    GoReleaser authenticates to GitHub Releases with the same automatic
-   `GITHUB_TOKEN` (no extra secret to configure), and uses the GHCR login above to
-   push the container images and manifests.
+   `GITHUB_TOKEN` (no extra secret to configure), and uses the registry logins
+   above to push the container images and manifests to GHCR and Docker Hub.
 
    A separate **Docker build (PR validation)** job builds both images
    single-arch (`linux/amd64`) without pushing on every pull request, so the
@@ -211,25 +214,27 @@ release.
 ## Container images
 
 On a `v*` tag, the same GoReleaser run that builds the archives also builds and
-pushes **multi-arch container images** to the GitHub Container Registry. This is
-configured in `.goreleaser.yaml` (`dockers:` + `docker_manifests:`) and implemented
+pushes **multi-arch container images** to the GitHub Container Registry
+(**canonical**) and to **Docker Hub** (mirror). This is configured in
+`.goreleaser.yaml` (`dockers:` + `docker_manifests:`) and implemented
 per [ADR-0005](adr/0005-container-image-tooling.md): images are built from the
 checked-in multi-stage Dockerfiles in `build/docker/` (a `golang:1.26.x` builder
 stage compiling a static binary onto `gcr.io/distroless/static:nonroot` — non-root,
-no shell).
+no shell). Each per-arch image is **built once and tagged for both registries**,
+so the image digests are identical on `ghcr.io` and `docker.io`.
 
-**Images** (one per binary):
+**Images** (one per binary, each in both registries):
 
-| Image                                   | Built from                  |
-| --------------------------------------- | --------------------------- |
-| `ghcr.io/accessgate/accessgate-auth`    | `build/docker/Dockerfile.auth`  |
-| `ghcr.io/accessgate/accessgate-proxy`   | `build/docker/Dockerfile.proxy` |
+| Image                                   | Mirror                                  | Built from                  |
+| --------------------------------------- | --------------------------------------- | --------------------------- |
+| `ghcr.io/accessgate/accessgate-auth`    | `docker.io/accessgate/accessgate-auth`  | `build/docker/Dockerfile.auth`  |
+| `ghcr.io/accessgate/accessgate-proxy`   | `docker.io/accessgate/accessgate-proxy` | `build/docker/Dockerfile.proxy` |
 
 **Architectures:** `linux/amd64` and `linux/arm64`. Each arch is built as a
 per-arch image (`:{Version}-amd64`, `:{Version}-arm64`) and the two are joined into
 a single multi-arch manifest via `docker_manifests:`.
 
-**Tags** published per release, for each image:
+**Tags** published per release, for each image (same scheme in both registries):
 
 | Tag           | Example                                          | Notes                                  |
 | ------------- | ------------------------------------------------ | -------------------------------------- |
@@ -243,11 +248,16 @@ Pull an image with:
 
 ```bash
 docker pull ghcr.io/accessgate/accessgate-proxy:0.4.2
+# or from the Docker Hub mirror:
+docker pull accessgate/accessgate-proxy:0.4.2
 ```
 
 CI requirements for the image build live in the `release` job
 (`.github/workflows/ci.yaml`): QEMU + Docker Buildx for cross-arch builds, a
-`ghcr.io` login, and `packages: write` permission (see [What CI does](#what-ci-does)).
+`ghcr.io` login with `packages: write` permission, and a `docker.io` login via
+the `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` repo secrets (see
+[What CI does](#what-ci-does)). The release job also syncs the Docker Hub repo
+pages from `build/docker/dockerhub-overview-{auth,proxy}.md` on each release.
 
 The images are **keyless-signed with cosign** and carry **SLSA build
 provenance** — see [Supply-chain artifacts and
@@ -271,8 +281,8 @@ What gets produced on each release:
 | `{archive}.sbom.json`          | SPDX-JSON SBOM per archive (syft)                     | GitHub Release asset     |
 | `checksums.txt.sig`            | Keyless cosign signature of `checksums.txt`           | GitHub Release asset     |
 | `checksums.txt.pem`            | Sigstore signing certificate for the above            | GitHub Release asset     |
-| Image signatures               | Keyless cosign signatures of the GHCR images (by digest) | OCI artifacts in GHCR |
-| Build provenance attestations  | SLSA provenance for the binaries and the image digests | GitHub attestations / GHCR |
+| Image signatures               | Keyless cosign signatures of the images (by digest)   | OCI artifacts in GHCR and Docker Hub |
+| Build provenance attestations  | SLSA provenance for the binaries and the image digests | GitHub attestations / GHCR / Docker Hub |
 
 ### Prerequisites
 
@@ -314,14 +324,22 @@ sha256sum --check --ignore-missing checksums.txt
 
 ### Verify a container image
 
-cosign resolves the signature stored alongside the image in GHCR. Use an
-identity **regexp** so any `v*` tag of this repo matches:
+cosign resolves the signature stored alongside the image in its registry (GHCR
+and Docker Hub images are both signed). Use an identity **regexp** so any `v*`
+tag of this repo matches — the signer identity is the workflow ref, so it is the
+**same for both registries**:
 
 ```bash
 cosign verify \
   --certificate-identity-regexp '^https://github.com/accessgate/accessgate/\.github/workflows/ci\.yaml@refs/tags/v.*$' \
   --certificate-oidc-issuer "$ISSUER" \
   ghcr.io/accessgate/accessgate-proxy:0.4.2
+
+# The Docker Hub mirror verifies with the identical identity:
+cosign verify \
+  --certificate-identity-regexp '^https://github.com/accessgate/accessgate/\.github/workflows/ci\.yaml@refs/tags/v.*$' \
+  --certificate-oidc-issuer "$ISSUER" \
+  docker.io/accessgate/accessgate-proxy:0.4.2
 ```
 
 Repeat for `accessgate-auth`. Pin by digest (`...@sha256:...`) for the strongest
@@ -330,7 +348,7 @@ guarantee.
 ### Verify build provenance
 
 SLSA build provenance is attached as a GitHub attestation (binaries) and pushed
-to GHCR (images). Verify with `gh`:
+to each image registry (GHCR and Docker Hub). Verify with `gh`:
 
 ```bash
 # A released binary archive:
@@ -339,6 +357,10 @@ gh attestation verify accessgate_0.4.2_linux_amd64.tar.gz \
 
 # A container image (reads the attestation from the registry):
 gh attestation verify oci://ghcr.io/accessgate/accessgate-proxy:0.4.2 \
+  --repo accessgate/accessgate
+
+# The Docker Hub mirror:
+gh attestation verify oci://docker.io/accessgate/accessgate-proxy:0.4.2 \
   --repo accessgate/accessgate
 ```
 

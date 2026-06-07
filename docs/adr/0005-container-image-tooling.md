@@ -49,8 +49,13 @@ Concrete shape:
 - **Non-root**: images run as a non-root user (distroless `nonroot`), no shell, minimal
   surface.
 - **`HEALTHCHECK`** targeting each service's existing `GET /healthz`.
-- **Registry**: GitHub Container Registry, `ghcr.io/accessgate/accessgate-auth` and
-  `ghcr.io/accessgate/accessgate-proxy`.
+- **Registry**: GitHub Container Registry (canonical), `ghcr.io/accessgate/accessgate-auth`
+  and `ghcr.io/accessgate/accessgate-proxy`.
+  > **Update (2026-06, #118):** the same images are additionally mirrored to **Docker Hub**
+  > (`docker.io/accessgate/accessgate-{auth,proxy}`). Each per-arch image is built once and
+  > tagged for both registries (identical digests); GHCR remains canonical and the default in
+  > Helm/compose/docs. Docker Hub authenticates via the `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN`
+  > repo secrets with a fail-fast preflight before any publish.
 - **Tag-driven publish**: images are built and pushed by the GoReleaser `release` job on a
   `v*` tag (same trigger as today's archives), authenticating to GHCR with the workflow's
   token; tags follow the release version plus a moving `latest`.

@@ -71,6 +71,8 @@ auth:
   replicaCount: 2
 
   image:
+    # GHCR is the canonical registry; the same image (identical digest) is also
+    # available from the Docker Hub mirror: docker.io/accessgate/accessgate-auth
     repository: ghcr.io/accessgate/accessgate-auth
     # -- Image tag. Defaults to .Chart.AppVersion when left empty.
     tag: ""
@@ -161,6 +163,8 @@ proxy:
   replicaCount: 2
 
   image:
+    # GHCR is the canonical registry; the same image (identical digest) is also
+    # available from the Docker Hub mirror: docker.io/accessgate/accessgate-proxy
     repository: ghcr.io/accessgate/accessgate-proxy
     # -- Image tag. Defaults to .Chart.AppVersion when left empty.
     tag: ""

@@ -48,8 +48,8 @@ elevated scopes signing/attestation require: `contents: write`, `packages: write
 | --- | --- | --- |
 | **SBOM** (SPDX-JSON, one per archive) | `syft` via GoReleaser `sboms:` | `.goreleaser.yaml` `sboms.archive-sbom`; `anchore/sbom-action/download-syft` installs syft (`ci.yaml`) |
 | **Checksum signature** (keyless cosign) | `cosign sign-blob` | `.goreleaser.yaml` `signs.checksum-keyless` → `checksums.txt.sig` + `.pem` |
-| **Container image signatures** (keyless cosign, by digest) | `cosign sign` | `.goreleaser.yaml` `docker_signs.image-keyless`; stored as OCI artifacts in GHCR |
-| **SLSA build provenance** (binaries + image digests) | `actions/attest-build-provenance@v2` | `ci.yaml` release steps; image attestations pushed to registry by resolved digest |
+| **Container image signatures** (keyless cosign, by digest) | `cosign sign` | `.goreleaser.yaml` `docker_signs.image-keyless`; stored as OCI artifacts in GHCR and Docker Hub |
+| **SLSA build provenance** (binaries + image digests) | `actions/attest-build-provenance@v2` | `ci.yaml` release steps; image attestations pushed to each registry (GHCR + Docker Hub) by resolved digest |
 
 All signing is **keyless** (Sigstore/Fulcio + Rekor via GitHub Actions OIDC) — there
 are **no private keys to manage or rotate**.
@@ -65,12 +65,12 @@ cosign verify-blob \
   --certificate-identity 'https://github.com/accessgate/accessgate/.github/workflows/ci.yaml@refs/tags/vX.Y.Z' \
   --certificate-oidc-issuer "$ISSUER" checksums.txt
 
-# Container image:
+# Container image (same identity for the docker.io/accessgate/* mirrors):
 cosign verify \
   --certificate-identity-regexp '^https://github.com/accessgate/accessgate/\.github/workflows/ci\.yaml@refs/tags/v.*$' \
   --certificate-oidc-issuer "$ISSUER" ghcr.io/accessgate/accessgate-proxy:X.Y.Z
 
-# Build provenance:
+# Build provenance (likewise for oci://docker.io/accessgate/...):
 gh attestation verify oci://ghcr.io/accessgate/accessgate-proxy:X.Y.Z --repo accessgate/accessgate
 ```
 

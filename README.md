@@ -65,11 +65,19 @@ same stack end-to-end as a smoke test.
 ### Published images
 
 Tagged releases (`v*`) publish multi-arch (`linux/amd64`, `linux/arm64`) images to
-the GitHub Container Registry, so you can run AccessGate without building from source:
+the GitHub Container Registry (canonical), so you can run AccessGate without
+building from source:
 
 ```bash
 docker pull ghcr.io/accessgate/accessgate-proxy:<tag>
 docker pull ghcr.io/accessgate/accessgate-auth:<tag>
+```
+
+The same images are mirrored to Docker Hub:
+
+```bash
+docker pull accessgate/accessgate-proxy:<tag>
+docker pull accessgate/accessgate-auth:<tag>
 ```
 
 See [docs/RELEASING.md](docs/RELEASING.md) for image names, tags, and the publish
