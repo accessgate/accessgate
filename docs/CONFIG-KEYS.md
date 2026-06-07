@@ -105,7 +105,6 @@ the value is empty/zero.
 | Key                      | Type       | Required | Default | Description |
 | ------------------------ | ---------- | -------- | ------- | ----------- |
 | `post_login_webhook_url` | string     | no       | —       | Optional webhook called after successful login. |
-| `session_enrichment_api` | string     | no       | —       | Optional API used to enrich session data. |
 | `cors_allowed_origins`   | comma list | no       | —       | Origins allowed for CORS. |
 | `provider_plugin_id`     | string     | no       | —       | Selects an identity-provider plugin by ID or capability (e.g. `oidc`, `provider:oidc`). Empty uses the built-in OIDC provider configured above. |
 
@@ -141,7 +140,7 @@ when the value is empty/zero.
 | ----------------------- | ---------------- | -------- | ------- | ----------- |
 | `policy_engine`         | string           | no       | `wasm`  | Policy backend: `wasm` or `rego`. Any other non-empty value is rejected by `Validate()`. |
 | `policy_bundle_path`    | string           | no       | —       | Path to the policy bundle: a `.wasm` file (wasm engine) or `.rego` file (rego engine). |
-| `policy_fallback_allow` | bool (nullable)  | no       | `false` | Behavior when no policy is loaded or evaluation fails: `true` = allow, `false` = deny (503). Defaults to deny; explicit `true` is required to allow unevaluated requests. |
+| `policy_fallback_allow` | flexible bool    | no       | `false` | Behavior when no policy is loaded or evaluation fails: `true` = allow, `false` = deny (503). Fail-closed by default — an unset/empty value is equivalent to `false` (deny); explicit `true` is required to allow unevaluated requests. |
 | `policy_reload_enabled`  | bool            | no       | `false` | Enable local policy hot-reload. When `true`, the proxy polls `policy_bundle_path`'s mtime and reloads the bundle in place (re-verifying the signature, fail-closed) without a restart. A failed reload (bad compile/signature/read) retains the last-good policy and never enters a deny-all state. Requires `policy_bundle_path` to be set. |
 | `policy_reload_interval` | string (duration) | no     | `10s`   | Poll period for hot-reload, as a Go duration (e.g. `10s`, `1m`). Only consulted when `policy_reload_enabled` is `true`. Must be parseable and at least `1s`. |
 

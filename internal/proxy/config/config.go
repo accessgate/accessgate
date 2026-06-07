@@ -93,8 +93,9 @@ type Config struct {
 	// For rego: path to a .rego file.
 	PolicyBundlePath string `json:"policy_bundle_path"`
 	// PolicyFallbackAllow configures behavior when no policy is loaded or evaluation fails.
-	// When true fallback is allow; when false fallback is deny with 503.
-	PolicyFallbackAllow *bool `json:"policy_fallback_allow"`
+	// When true fallback is allow; when false (the default) fallback is deny with 503.
+	// It is fail-closed by default: an unset/empty value is equivalent to false (deny).
+	PolicyFallbackAllow FlexibleBool `json:"policy_fallback_allow"`
 
 	// PolicyReloadEnabled enables local policy hot-reload: the proxy polls the bundle
 	// file's mtime and reloads it in place (re-verifying the signature, fail-closed)
@@ -296,11 +297,9 @@ func (c *Config) ApplyDefaults() {
 	if c.PolicyReloadInterval == "" {
 		c.PolicyReloadInterval = DefaultPolicyReloadInterval.String()
 	}
-	// Default fallback to deny. Require explicit opt-in (policy_fallback_allow: true) to allow unevaluated requests.
-	if c.PolicyFallbackAllow == nil {
-		v := false
-		c.PolicyFallbackAllow = &v
-	}
+	// PolicyFallbackAllow is fail-closed by default: the zero value (false) means deny.
+	// No defaulting is needed — an unset key already yields deny. Allowing unevaluated
+	// requests requires an explicit policy_fallback_allow: true.
 	if c.HeaderUserIDClaim == "" {
 		c.HeaderUserIDClaim = "sub"
 	}

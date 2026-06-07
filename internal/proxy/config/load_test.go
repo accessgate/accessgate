@@ -35,7 +35,7 @@ func TestLoad_JSONFileAndEnvOverride(t *testing.T) {
 	if cfg.HTTPPort != "8081" {
 		t.Fatalf("expected default HTTPPort 8081, got %q", cfg.HTTPPort)
 	}
-	if cfg.PolicyFallbackAllow == nil || *cfg.PolicyFallbackAllow {
+	if cfg.PolicyFallbackAllow {
 		t.Fatalf("expected PolicyFallbackAllow default false, got %#v", cfg.PolicyFallbackAllow)
 	}
 }

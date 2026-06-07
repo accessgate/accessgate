@@ -103,9 +103,8 @@ type Config struct {
 	// AdminSecret if set guards /admin and PATCH|POST /internal/session; requests must include header X-Admin-Secret: <value>. Empty disables those endpoints.
 	AdminSecret string `json:"admin_secret"`
 
-	// Optional: webhook and enrichment
-	PostLoginWebhookURL  string `json:"post_login_webhook_url"`
-	SessionEnrichmentAPI string `json:"session_enrichment_api"`
+	// Optional: webhook
+	PostLoginWebhookURL string `json:"post_login_webhook_url"`
 
 	// CORS
 	CORSAllowedOrigins CommaStrings `json:"cors_allowed_origins"`
