@@ -3,6 +3,10 @@
 AccessGate is an authentication and authorization runtime, so security is
 core to the project. Thank you for helping keep it and its users safe.
 
+> For a code-grounded summary of AccessGate's v1.0 security posture (supply-chain
+> scanning, policy/plugin integrity, request-path defenses) plus a release
+> checklist, see [docs/SECURITY-POSTURE.md](docs/SECURITY-POSTURE.md).
+
 ## Reporting a vulnerability
 
 **Do not open a public GitHub issue for security vulnerabilities.**
