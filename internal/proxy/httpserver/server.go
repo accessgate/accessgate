@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	pkgproxy "github.com/accessgate/accessgate/internal/authz"
-	"github.com/accessgate/accessgate/internal/policy"
 	"github.com/accessgate/accessgate/internal/plugin"
+	"github.com/accessgate/accessgate/internal/policy"
 	"github.com/accessgate/accessgate/internal/proxy/config"
 )
 

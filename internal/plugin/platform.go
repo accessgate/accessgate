@@ -72,8 +72,12 @@ type scopedHost struct {
 }
 
 func (h *scopedHost) PluginID() string { return h.pluginID }
-func (h *scopedHost) Logger() Logger   { return &scopedLogger{base: h.platform.logger, pluginID: h.pluginID} }
-func (h *scopedHost) Metrics() Metrics { return &scopedMetrics{base: h.platform.metrics, pluginID: h.pluginID} }
+func (h *scopedHost) Logger() Logger {
+	return &scopedLogger{base: h.platform.logger, pluginID: h.pluginID}
+}
+func (h *scopedHost) Metrics() Metrics {
+	return &scopedMetrics{base: h.platform.metrics, pluginID: h.pluginID}
+}
 func (h *scopedHost) Cache() Cache {
 	return &scopedCache{base: h.platform.cache, pluginID: h.pluginID, maxKeyLength: h.platform.maxCacheKeyLength}
 }
@@ -85,10 +89,18 @@ type scopedLogger struct {
 	pluginID string
 }
 
-func (l *scopedLogger) Debug(msg string, fields map[string]any) { l.base.Debug(msg, withPluginField(fields, l.pluginID)) }
-func (l *scopedLogger) Info(msg string, fields map[string]any)  { l.base.Info(msg, withPluginField(fields, l.pluginID)) }
-func (l *scopedLogger) Warn(msg string, fields map[string]any)  { l.base.Warn(msg, withPluginField(fields, l.pluginID)) }
-func (l *scopedLogger) Error(msg string, fields map[string]any) { l.base.Error(msg, withPluginField(fields, l.pluginID)) }
+func (l *scopedLogger) Debug(msg string, fields map[string]any) {
+	l.base.Debug(msg, withPluginField(fields, l.pluginID))
+}
+func (l *scopedLogger) Info(msg string, fields map[string]any) {
+	l.base.Info(msg, withPluginField(fields, l.pluginID))
+}
+func (l *scopedLogger) Warn(msg string, fields map[string]any) {
+	l.base.Warn(msg, withPluginField(fields, l.pluginID))
+}
+func (l *scopedLogger) Error(msg string, fields map[string]any) {
+	l.base.Error(msg, withPluginField(fields, l.pluginID))
+}
 
 func withPluginField(fields map[string]any, pluginID string) map[string]any {
 	if fields == nil {
