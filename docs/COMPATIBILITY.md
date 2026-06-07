@@ -1,7 +1,26 @@
 # AccessGate v1.0 Compatibility & Stability Contract
 
-> Status: proposed for the `v1.0` milestone (umbrella [#86](https://github.com/accessgate/accessgate/issues/86)).
+> Status: **Frozen as of v1.0.0** (config-schema freeze [#103](https://github.com/accessgate/accessgate/issues/103); breaking-change audit signed off under umbrella [#86](https://github.com/accessgate/accessgate/issues/86)).
 > Scope: the **accessgate core** module `github.com/accessgate/accessgate`.
+
+This contract is frozen for the v1.x line: the recognized config-key set and
+types, the `accessgate.{auth,policy,proxy,sdk}.v1` proto packages, and the
+Stable-tier `pkg/**` Go surface are stable, and each is guarded by a mechanical
+CI gate (see the audit summary below). Changes within v1.x are additive only;
+breaks wait for v2.0.
+
+### Breaking-change audit (#86 sign-off)
+
+Every contract surface is mechanically gated on `pull_request` — none rely on
+review discipline alone:
+
+| Surface | Mechanical gate | Where it runs (`.github/workflows/ci.yaml`) |
+| --- | --- | --- |
+| **Proto** (`proto/accessgate/**/v1`) | `buf breaking` against `main` (`proto/buf.yaml`, `FILE` level) via `make proto-breaking` | `test` job → step **"Check proto breaking changes"** (`if: pull_request`); committed bindings also pinned by **"Verify generated proto files are up to date"** |
+| **Config schema** (`schemas/{auth,proxy}.schema.json`) | `make schema` + `git diff --exit-code schemas/` (drift) and example validation | `test` job → steps **"Verify config schemas are up to date"** and **"Validate example configs"** (runs on every PR) |
+| **Public Go API** (`pkg/**`) | `apidiff` base-vs-head via `scripts/go-api-diff.sh` (#100) | `go-api-diff` job **"Go API diff (pkg/\*\*)"** (`if: pull_request`) |
+
+No contract surface is guarded by review only.
 
 This document is the stability contract for AccessGate v1.0. It defines what we
 promise not to break within the v1.x line, how that promise is mechanically
@@ -99,9 +118,9 @@ These are recommendations, not blockers — see the checklist at the end.
 - **`cookie_same_site` runtime field:** the parsed `http.SameSite` value carries
   `json:"-"` and is correctly *not* a config key. Good as-is — just confirm the
   generated schema does not leak it.
-- **`AGENT_CONFIG` / `BINARY=agent`:** already deprecated aliases. They are fine
-  to carry through v1.x; just record them explicitly as "deprecated, removal in
-  v2.0" so the removal is not a surprise.
+- **`AGENT_CONFIG` / `BINARY=agent`:** already deprecated aliases, carried
+  through v1.x. Resolved (#103): recorded explicitly as "deprecated, removal in
+  v2.0" in `docs/CONFIG-KEYS.md` so the removal is not a surprise.
 
 ---
 
@@ -278,11 +297,19 @@ code changes mandated by this doc; they are decisions to lock deliberately.
   fail-closed (deny). The closed JSON Schema type (`boolean`) is unchanged, so
   this is not a schema-breaking change. The dead `session_enrichment_api` auth key
   was also removed before freeze (never read by any code).
-- [ ] **Config:** record `AGENT_CONFIG` / `BINARY=agent` explicitly as
-  "deprecated, removal in v2.0" (already aliased; just make the lifecycle
-  explicit).
-- [ ] **Proto:** one-time review of v1 message field numbering for long-term
-  additive headroom; confirm no message needs a pre-freeze restructure.
+- [x] **Config:** recorded `AGENT_CONFIG` / `BINARY=agent` explicitly as
+  "deprecated, removal in v2.0" in `docs/CONFIG-KEYS.md` (#103) — already aliased;
+  the lifecycle (carried through v1.x, removed in v2.0) is now explicit.
+- [x] **Config:** verified the env-only `CommaStrings` list-field round-trip
+  (#103): a comma-separated env value (e.g. `OIDC_SCOPES=openid,profile,email`)
+  now loads into the slice field with no config file present. go-config's decoder
+  rejects a bare string for a slice field and does not consult `json.Unmarshaler`,
+  so `internal/configload` splits these keys via a pre-decode resolver. Guarded by
+  `TestLoadIntoCommaListEnvOnly` (+ env-single / file-array / env-overrides-array
+  cases) and `internal/auth/config` `TestLoad_CommaScopesEnvOnly`.
+- [x] **Proto:** one-time review of v1 message field numbering for long-term
+  additive headroom completed (#104, closed happy as-is) — no message needs a
+  pre-freeze restructure; the only forward path is additive (new field numbers).
 - [x] **Go API:** decided the fate of incidentally-exported symbols (#101).
   Decisions: **`cookie.Encrypt`/`Decrypt`** — unexported to `encrypt`/`decrypt`;
   they are low-level AES-GCM primitives consumed only by the codec, and external
