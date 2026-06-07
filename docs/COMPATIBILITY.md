@@ -221,17 +221,45 @@ after freeze would be a breaking change:
   additively to avoid a break — confirm this is the intended long-term shape, as
   it freezes at v1.
 
-### No Go API-diff gate today — recommended follow-up
+### Enforcement: the Go API-diff gate
 
-Proto has `buf breaking`; config has the `make schema` drift check. **Go has no
-equivalent automated API-diff gate.** Nothing today prevents an accidental
-breaking change to `pkg/**`.
-
-**Recommendation (file as a follow-up under #86, do not implement here):** add a
-CI job that runs `golang.org/x/exp/cmd/apidiff` (or `gorelease`) against the last
-release tag for the `pkg/**` packages and fails on incompatible changes — the Go
-analogue of the buf breaking gate. This closes the one surface that is currently
+Proto has `buf breaking`; config has the `make schema` drift check; and `pkg/**`
+now has its own mechanical gate (#100), so the public Go surface is no longer
 guarded by review discipline alone.
+
+CI (`.github/workflows/ci.yaml`, job **"Go API diff (pkg/\*\*)"**) runs on every
+pull request. It checks out both the PR head and the target branch, then runs
+`scripts/go-api-diff.sh`, which uses
+[`golang.org/x/exp/cmd/apidiff`](https://pkg.go.dev/golang.org/x/exp/cmd/apidiff)
+to compare the exported API of every package under `pkg/**` between the two
+checkouts and fails the build on any **incompatible** change.
+
+- **Scope is `pkg/**` only.** `internal/**` is outside the contract, and
+  `proto/gen/go` is already covered by `buf breaking` — gating it twice would be
+  redundant and noisy.
+- **Tool choice — `apidiff`, not `gorelease`.** `gorelease` is module-version
+  oriented (it reasons about the next semver tag against the last release tag),
+  which is noisy for an unreleased, pre-1.0 module and answers a different
+  question. `apidiff` does exactly what this gate needs: a per-package
+  base-vs-head export-data comparison that classifies each change as compatible
+  (additive) or incompatible. The tool version is pinned in the script for
+  reproducibility.
+- **What fails the gate:** removing/renaming an exported symbol, changing a
+  function signature, adding a method to an exported interface, removing a
+  package — anything `apidiff` reports under `-incompatible`. Note `apidiff`
+  prints findings but exits 0, so the script fails on *output presence*; a
+  package that existed on base but is gone on head is reported as an incompatible
+  removal by the script itself.
+- **What passes:** new packages, new exported functions/types, new struct fields
+  on DTOs — additive evolution, per the SemVer commitment above.
+- **Skip semantics:** the job always runs on `pull_request` (so it can be a
+  required status check), but short-circuits to success when the PR touches no
+  `pkg/**` or `go.{mod,sum}` files — keeping a required check green on unrelated
+  PRs.
+
+Net effect: **any breaking change to a Stable `pkg/**` symbol fails CI** — the Go
+analogue of the `buf breaking` gate. An intentional break is a major-version
+change and must be called out as such.
 
 ---
 
@@ -273,9 +301,11 @@ code changes mandated by this doc; they are decisions to lock deliberately.
   deliberate interface-segregation pair (narrow consumer interface + broader
   capability interface implemented by concrete stores), not a vestigial
   deprecation step. Documented the intent on both interfaces.
-- [ ] **Tooling (follow-up issue under #86):** add an `apidiff`/`gorelease` CI
-  gate for `pkg/**` to mechanically enforce the Go SemVer promise — parity with
-  the existing `buf breaking` and `make schema` gates.
+- [x] **Tooling:** added the `apidiff` CI gate for `pkg/**` (#100) to
+  mechanically enforce the Go SemVer promise — parity with the existing
+  `buf breaking` and `make schema` gates. See §3, "Enforcement: the Go API-diff
+  gate" (`.github/workflows/ci.yaml` job **"Go API diff (pkg/\*\*)"**,
+  `scripts/go-api-diff.sh`).
 
 ## What v1.0 guarantees
 
@@ -289,5 +319,6 @@ code changes mandated by this doc; they are decisions to lock deliberately.
   contracts. `buf breaking` in CI rejects any wire-breaking change. Breaking the
   SDK contract requires `accessgate.sdk.v2`, never a mutation of v1.
 - **Go API:** the Stable-tier `pkg/**` packages carry a SemVer promise — no
-  breaking changes within v1.x, additive evolution only. `internal/**` is
-  excluded from all guarantees and may change freely.
+  breaking changes within v1.x, additive evolution only. The `apidiff` CI gate
+  (§3) rejects any incompatible change to the `pkg/**` surface on every PR.
+  `internal/**` is excluded from all guarantees and may change freely.

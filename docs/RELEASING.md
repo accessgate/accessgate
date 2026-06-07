@@ -77,7 +77,12 @@ tests as a safety net (see [What CI does](#what-ci-does)), but it does **not** r
 - [ ] **Breaking changes are noted.** Every backward-incompatible change is
       written down so it can go into the release notes (and, pre-1.0, so users of
       a `0.MINOR` bump know what to expect). There is no automated changelog yet
-      (see [Future improvements](#future-improvements)).
+      (see [Future improvements](#future-improvements)). Breaking changes are
+      mechanically surfaced by the contract gates that run on every PR — `buf
+      breaking` for the protos, the `make schema` drift check for the config
+      schemas, and the `apidiff` gate for the public Go API under `pkg/**` (see
+      [`docs/COMPATIBILITY.md`](./COMPATIBILITY.md)) — so an intentional break
+      should already have been flagged in review.
 - [ ] **You picked the right version.** The bump matches the
       [versioning policy](#versioning-policy) above.
 

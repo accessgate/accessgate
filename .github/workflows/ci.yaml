@@ -175,6 +175,67 @@ jobs:
           push: false
           tags: accessgate-proxy:ci
 
+  # PR-time public Go API-diff gate for pkg/** — the Go analogue of the
+  # `buf breaking` proto gate and the `make schema` config-drift gate
+  # (docs/COMPATIBILITY.md §3). Fails on INCOMPATIBLE changes to the exported
+  # surface under pkg/**; additive changes are allowed. Scope is pkg/** only:
+  # internal/** is outside the v1 contract and proto/gen/go is already covered
+  # by `buf breaking`.
+  #
+  # The job ALWAYS runs on pull_request so it can be made a required status
+  # check; when no pkg/** or go.{mod,sum} files changed it short-circuits to a
+  # success (reporting "skipped" in its own log, but a green check to GitHub).
+  go-api-diff:
+    name: Go API diff (pkg/**)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    steps:
+      # HEAD (PR) checkout. fetch-depth: 0 so we can diff against the merge base.
+      - name: Checkout PR head
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          path: head
+
+      # BASE checkout at the PR's target branch, into a separate directory so
+      # apidiff can build export data from each side independently.
+      - name: Checkout base (${{ github.base_ref }})
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.base_ref }}
+          fetch-depth: 0
+          path: base
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: head/go.mod
+          cache: true
+
+      # Fast skip: only run the (relatively heavy) apidiff comparison when the
+      # PR actually touches pkg/** or the module files. We diff the PR head
+      # against the merge base with the target branch. On no relevant change the
+      # job still exits 0, so a required check stays green.
+      - name: Detect pkg/** or go.mod changes
+        id: changes
+        working-directory: head
+        run: |
+          base_sha="$(git merge-base "origin/${{ github.base_ref }}" HEAD)"
+          echo "merge base: ${base_sha}"
+          if git diff --name-only "${base_sha}" HEAD \
+               | grep -E '^(pkg/|go\.mod$|go\.sum$)' > /dev/null; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+            echo "No pkg/** or go.{mod,sum} changes — API-diff gate skipped (pass)."
+          fi
+
+      - name: Run Go API-diff gate
+        if: steps.changes.outputs.relevant == 'true'
+        run: head/scripts/go-api-diff.sh base head
+
   release:
     name: Release
     runs-on: ubuntu-latest
