@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/ArmanAvanesyan/go-config/config"
 	"github.com/ArmanAvanesyan/go-config/providers/source/env"
@@ -142,5 +143,70 @@ func TestPolicyFallbackAllowDefaultsDeny(t *testing.T) {
 	}
 	if *c.PolicyFallbackAllow {
 		t.Error("PolicyFallbackAllow should default to false (deny), not true")
+	}
+}
+
+func TestPolicyReloadDefaults(t *testing.T) {
+	c := &Config{}
+	c.ApplyDefaults()
+	if c.PolicyReloadEnabled {
+		t.Error("policy_reload_enabled should default to false")
+	}
+	if c.PolicyReloadInterval != DefaultPolicyReloadInterval.String() {
+		t.Errorf("policy_reload_interval default: got %q, want %q", c.PolicyReloadInterval, DefaultPolicyReloadInterval.String())
+	}
+	if got := c.PolicyReloadIntervalDuration(); got != DefaultPolicyReloadInterval {
+		t.Errorf("PolicyReloadIntervalDuration: got %s, want %s", got, DefaultPolicyReloadInterval)
+	}
+}
+
+func TestPolicyReloadIntervalValidation(t *testing.T) {
+	base := func() *Config {
+		return &Config{
+			UpstreamURL:           "http://upstream",
+			AuthURL:               "http://auth",
+			AllowPrivateUpstreams: true,
+		}
+	}
+
+	// Unparseable duration is rejected.
+	c := base()
+	c.PolicyReloadInterval = "not-a-duration"
+	if err := c.Validate(); err == nil {
+		t.Fatal("expected error for unparseable policy_reload_interval")
+	}
+
+	// Below the minimum is rejected.
+	c = base()
+	c.PolicyReloadInterval = "100ms"
+	if err := c.Validate(); err == nil {
+		t.Fatalf("expected error for policy_reload_interval below %s", MinPolicyReloadInterval)
+	}
+
+	// A sane value passes.
+	c = base()
+	c.PolicyReloadInterval = "5s"
+	if err := c.Validate(); err != nil {
+		t.Fatalf("expected 5s to validate, got %v", err)
+	}
+	if got := c.PolicyReloadIntervalDuration(); got != 5*time.Second {
+		t.Fatalf("PolicyReloadIntervalDuration: got %s, want 5s", got)
+	}
+}
+
+func TestPolicyReloadEnabledRequiresBundlePath(t *testing.T) {
+	c := &Config{
+		UpstreamURL:           "http://upstream",
+		AuthURL:               "http://auth",
+		AllowPrivateUpstreams: true,
+		PolicyReloadEnabled:   true,
+		// PolicyBundlePath intentionally empty.
+	}
+	if err := c.Validate(); err == nil {
+		t.Fatal("expected policy_reload_enabled without policy_bundle_path to be rejected")
+	}
+	c.PolicyBundlePath = "/etc/accessgate/policy.wasm"
+	if err := c.Validate(); err != nil {
+		t.Fatalf("expected validation to pass once bundle path is set, got %v", err)
 	}
 }

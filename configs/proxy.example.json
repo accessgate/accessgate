@@ -11,6 +11,8 @@
   "policy_engine": "wasm",
   "policy_bundle_path": "",
   "policy_fallback_allow": true,
+  "policy_reload_enabled": false,
+  "policy_reload_interval": "10s",
   "pipeline_plugins": [],
   "plugins_manifest_dir": "",
   "plugins_manifest_strict": false,

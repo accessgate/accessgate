@@ -40,7 +40,7 @@ func buildProxyHandler(ctx context.Context, cfg *config.Config) (http.Handler, p
 
 	metrics, metricsHandler := observability.NewPrometheusMetrics(nil)
 	tracer, tracerShutdown := observability.NewOTLPTracerFromEnvWithShutdown()
-	policyEngine, err := buildPolicyEngine(cfg)
+	policyEngine, policyStop, err := buildPolicyEngine(ctx, cfg)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("policy engine: %w", err)
 	}
@@ -59,8 +59,20 @@ func buildProxyHandler(ctx context.Context, cfg *config.Config) (http.Handler, p
 		Tracer:          tracer,
 	}
 
+	// Combine tracer and policy-hot-watcher shutdown into a single shutdown hook so
+	// main.go's lifecycle code does not need to know about either independently.
+	shutdown := func(sctx context.Context) error {
+		if policyStop != nil {
+			policyStop()
+		}
+		if tracerShutdown != nil {
+			return tracerShutdown(sctx)
+		}
+		return nil
+	}
+
 	handler := httpserver.New(cfg, engine, reg, metricsHandler).Handler()
-	return handler, engine, tracerShutdown, nil
+	return handler, engine, shutdown, nil
 }
 
 // manifestLogger is used for non-fatal manifest discovery diagnostics. It is a package var
@@ -107,35 +119,70 @@ func discoverManifests(ctx context.Context, cfg *config.Config, reg *plugin.Regi
 	return nil
 }
 
-func buildPolicyEngine(cfg *config.Config) (policy.Engine, error) {
+// buildPolicyEngine constructs the policy engine for the configured backend. When
+// policy_reload_enabled is set (and a bundle path is configured), the engine is wrapped
+// in a policy.HotWatcher that polls the bundle's mtime and reloads it in place
+// (re-verifying the signature, fail-closed to last-good). The returned stop function is
+// non-nil only when a watcher was started; callers must invoke it on shutdown.
+func buildPolicyEngine(ctx context.Context, cfg *config.Config) (policy.Engine, func(), error) {
 	fallback := policy.FallbackConfig{Allow: cfg.PolicyFallbackAllow != nil && *cfg.PolicyFallbackAllow}
 
 	switch cfg.PolicyEngine {
 	case config.PolicyEngineWASM:
 		if cfg.PolicyBundlePath == "" {
-			return policy.NewWASMRuntime(fallback), nil
+			return policy.NewWASMRuntime(fallback), nil, nil
 		}
 		var publicKeyPEM string
 		if cfg.BundlePublicKeyPath != "" {
 			pem, err := os.ReadFile(cfg.BundlePublicKeyPath)
 			if err != nil {
-				return nil, fmt.Errorf("read bundle public key %q: %w", cfg.BundlePublicKeyPath, err)
+				return nil, nil, fmt.Errorf("read bundle public key %q: %w", cfg.BundlePublicKeyPath, err)
 			}
 			publicKeyPEM = string(pem)
 		}
+		// A single loader is reused across reloads so its mtime cache and verified-key
+		// state persist; LoadBundle re-verifies the signature on every changed mtime.
 		loader := policy.NewBundleLoader(fallback, publicKeyPEM)
-		return loader.LoadBundle(cfg.PolicyBundlePath)
+		eng, err := loader.LoadBundle(cfg.PolicyBundlePath)
+		if err != nil {
+			return nil, nil, err
+		}
+		reload := func() (policy.Engine, error) { return loader.LoadBundle(cfg.PolicyBundlePath) }
+		return maybeWrapHotWatcher(ctx, cfg, eng, reload)
 	case config.PolicyEngineRego:
 		eng := policy.NewRegoEngine(fallback)
-		if cfg.PolicyBundlePath != "" {
+		if cfg.PolicyBundlePath == "" {
+			return eng, nil, nil
+		}
+		if err := eng.Load(cfg.PolicyBundlePath); err != nil {
+			return nil, nil, err
+		}
+		// Rego reload re-compiles in place on the same engine instance; Load already
+		// swaps the prepared query under its own lock, so we return the same engine.
+		reload := func() (policy.Engine, error) {
 			if err := eng.Load(cfg.PolicyBundlePath); err != nil {
 				return nil, err
 			}
+			return eng, nil
 		}
-		return eng, nil
+		return maybeWrapHotWatcher(ctx, cfg, eng, reload)
 	default:
-		return policy.NewWASMRuntime(fallback), nil
+		return policy.NewWASMRuntime(fallback), nil, nil
 	}
+}
+
+// maybeWrapHotWatcher wraps eng in a started policy.HotWatcher when hot-reload is
+// enabled, returning the watcher (which itself satisfies policy.Engine) and a stop
+// function. When disabled it returns eng unchanged with a nil stop function.
+func maybeWrapHotWatcher(ctx context.Context, cfg *config.Config, eng policy.Engine, reload policy.ReloadFunc) (policy.Engine, func(), error) {
+	if !cfg.PolicyReloadEnabled {
+		return eng, nil, nil
+	}
+	interval := cfg.PolicyReloadIntervalDuration()
+	watcher := policy.NewHotWatcher(cfg.PolicyBundlePath, interval, eng, reload, nil)
+	watcher.Start(ctx)
+	log.Printf("info: policy hot-reload enabled for %q every %s", cfg.PolicyBundlePath, interval)
+	return watcher, watcher.Stop, nil
 }
 
 func buildPipelinePlugins(ctx context.Context, cfg *config.Config, reg *plugin.Registry) ([]pkgproxy.PipelinePlugin, error) {

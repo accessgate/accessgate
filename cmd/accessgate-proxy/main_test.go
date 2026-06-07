@@ -19,9 +19,12 @@ func TestBuildPolicyEngineWASMNoBundle(t *testing.T) {
 	if err := cfg.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	e, err := buildPolicyEngine(cfg)
+	e, stop, err := buildPolicyEngine(context.Background(), cfg)
 	if err != nil || e == nil {
 		t.Fatalf("%v %v", e, err)
+	}
+	if stop != nil {
+		stop()
 	}
 }
 
