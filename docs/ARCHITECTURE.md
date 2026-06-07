@@ -268,7 +268,7 @@ plugins:
 | --- | --- | --- |
 | `pipeline` | `PipelinePlugin` | Participate in the proxy request pipeline; may short-circuit with a `Decision`. Example capability `pipeline:ratelimit`. |
 | `provider` | `ProviderPlugin` | Drive an IdP: authorization URL, code exchange, refresh, end-session. Example `provider:oidc`. |
-| `integration` | `IntegrationPlugin` | Attach the proxy engine to a host gateway (Caddy, Traefik, KrakenD). Example `integration:krakend`. |
+| `integration` | _(interface TBD)_ | Attach the proxy engine to a host gateway (Caddy, Traefik, KrakenD). Example `integration:krakend`. The behavioral interface is introduced with the first real implementation (#49). |
 
 **Capabilities** are symbolic strings (`Capability`) such as `pipeline:ratelimit` or
 `provider:oidc`. A plugin's `PluginDescriptor` advertises the capabilities it provides and
