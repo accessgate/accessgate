@@ -41,15 +41,13 @@ type PluginID string
 type PluginState string
 
 const (
-	PluginStateDiscovered  PluginState = "discovered"
-	PluginStateVerified    PluginState = "verified"
-	PluginStateRegistered  PluginState = "registered"
-	PluginStateConfigured  PluginState = "configured"
-	PluginStateInitialized PluginState = "initialized"
-	PluginStateStarted     PluginState = "started"
-	PluginStateHealthy     PluginState = "healthy"
-	PluginStateDegraded    PluginState = "degraded"
-	PluginStateStopped     PluginState = "stopped"
+	PluginStateDiscovered PluginState = "discovered"
+	PluginStateVerified   PluginState = "verified"
+	PluginStateRegistered PluginState = "registered"
+	PluginStateStarted    PluginState = "started"
+	PluginStateHealthy    PluginState = "healthy"
+	PluginStateDegraded   PluginState = "degraded"
+	PluginStateStopped    PluginState = "stopped"
 )
 
 // PluginHealth describes the health of a plugin as reported by the plugin itself.
@@ -133,14 +131,4 @@ type ProviderTokens struct {
 	RefreshToken string
 	IDToken      string
 	ExpiresIn    int
-}
-
-// IntegrationPlugin represents a gateway integration (e.g. Caddy, Traefik, KrakenD).
-// Implementations are responsible for wiring a configured proxy engine into the host gateway.
-type IntegrationPlugin interface {
-	Plugin
-
-	// Serve attaches the integration to the underlying gateway. The concrete type of hostCtx
-	// is gateway-specific (e.g. *caddy.Controller, traefik middleware context, etc.).
-	Serve(ctx context.Context, hostCtx any) error
 }

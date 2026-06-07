@@ -21,7 +21,8 @@ We define a small set of plugin contracts in `internal/plugin/api.go`.
   `Handle(ctx, req, principal) (*policy.Decision, error)`.
 - `provider` → `ProviderPlugin` — drives an IdP (authorization URL, code exchange, refresh,
   end-session).
-- `integration` → `IntegrationPlugin` — attaches the proxy engine to a host gateway.
+- `integration` — attaches the proxy engine to a host gateway. The behavioral interface is
+  introduced with the first real implementation (#49).
 
 **Capabilities** are symbolic strings (`Capability`) such as `pipeline:ratelimit`,
 `provider:oidc`, or `integration:krakend`. A `PluginDescriptor` advertises the capabilities a
