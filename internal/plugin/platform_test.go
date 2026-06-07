@@ -51,7 +51,10 @@ type captureCache struct {
 	lastKey string
 }
 
-func (c *captureCache) Get(_ context.Context, key string) (string, error) { c.lastKey = key; return "", nil }
+func (c *captureCache) Get(_ context.Context, key string) (string, error) {
+	c.lastKey = key
+	return "", nil
+}
 func (c *captureCache) Set(_ context.Context, key string, _ string, _ time.Duration) error {
 	c.lastKey = key
 	return nil
