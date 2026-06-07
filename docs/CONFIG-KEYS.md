@@ -27,11 +27,16 @@ Each binary resolves the config file path from environment variables in order:
 
 If none is set, the loader runs with environment variables only.
 
-> **Deprecated:** `AGENT_CONFIG` is a deprecated alias for `AUTH_CONFIG`,
-> retained for backward compatibility with the pre-rename `agent` service. New
-> deployments should use `AUTH_CONFIG` (or `CONFIG_PATH`). Similarly,
-> `BINARY=agent` is accepted by `make validate-config` as a deprecated alias for
-> `BINARY=auth` and emits a deprecation warning.
+> **Deprecated — removal in v2.0:** `AGENT_CONFIG` is a deprecated alias for
+> `AUTH_CONFIG`, retained for backward compatibility with the pre-rename `agent`
+> service. It is honored only by `accessgate-auth` (and `cmd/validateconfig`),
+> last in the precedence chain (`CONFIG_PATH` → `AUTH_CONFIG` → `AGENT_CONFIG`);
+> `accessgate-proxy` never reads it. Similarly, `BINARY=agent` is accepted by
+> `make validate-config` / `make render-config-example` as a deprecated alias for
+> `BINARY=auth` (it maps to `auth` and emits a deprecation warning —
+> `cmd/validateconfig/main.go`, `normalizeBinary`). Both aliases are carried
+> through the entire v1.x line and are scheduled for **removal in v2.0**; new
+> deployments should use `AUTH_CONFIG` (or `CONFIG_PATH`) and `BINARY=auth`.
 
 ## Value type notes
 
@@ -40,6 +45,10 @@ If none is set, the loader runs with environment variables only.
   env-var loaders that only produce strings.
 - **comma list** — accepts either a JSON/YAML array (`["openid", "profile"]`) or
   a single comma-separated string (`openid,profile`), convenient for env vars.
+  Environment variables are the common case here: e.g. `OIDC_SCOPES=openid,profile,email`
+  loads as a three-element list **without any config file present**. Surrounding
+  whitespace and empty entries are trimmed (`a,,b ` → `["a","b"]`). As with every
+  key, an env value overrides a file-supplied array for the same list field.
 
 ---
 

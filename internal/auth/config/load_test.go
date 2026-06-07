@@ -39,3 +39,33 @@ func TestLoad_JSONFileAndEnvOverride(t *testing.T) {
 		t.Fatal("expected default cookie name to be applied")
 	}
 }
+
+// TestLoad_CommaScopesEnvOnly is the v1.0 config-freeze guard for the
+// CommaStrings list field via env with NO config file present (#103). A
+// comma-separated OIDC_SCOPES must populate the OIDCScopes slice; before the
+// configload fix this failed to decode ("expected slice ... got string").
+func TestLoad_CommaScopesEnvOnly(t *testing.T) {
+	t.Setenv("OIDC_ISSUER", "https://idp.example.com")
+	t.Setenv("OIDC_REDIRECT_URI", "https://app.example.com/callback")
+	t.Setenv("OIDC_CLIENT_ID", "client-id")
+	t.Setenv("OIDC_CLIENT_SECRET", "real-client-secret")
+	t.Setenv("REDIS_URL", "redis://localhost:6379")
+	t.Setenv("COOKIE_SIGNING_SECRET", "real-cookie-signing-secret")
+	t.Setenv("APP_BASE_URL", "https://app.example.com")
+	t.Setenv("OIDC_SCOPES", "openid,profile,email")
+
+	cfg, err := Load(context.Background(), "")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	got := cfg.OIDCScopesSlice()
+	want := []string{"openid", "profile", "email"}
+	if len(got) != len(want) {
+		t.Fatalf("OIDCScopes: got %#v, want %#v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("OIDCScopes[%d]: got %q, want %q", i, got[i], want[i])
+		}
+	}
+}

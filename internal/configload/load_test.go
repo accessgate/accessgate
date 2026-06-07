@@ -86,3 +86,93 @@ func TestLoadIntoMissingFile(t *testing.T) {
 		t.Fatal("expected error for missing file")
 	}
 }
+
+// commaConfig exercises the comma-separated list handling for string-slice
+// fields (the CommaStrings shape). The env source delivers values as strings;
+// LoadInto must split a comma string into a list for these fields.
+type commaConfig struct {
+	Foo  string   `json:"foo"`
+	List []string `json:"oidc_scopes"`
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// TestLoadIntoCommaListEnvOnly is the v1.0 config-freeze round-trip guard
+// (#103, COMPATIBILITY.md §1): a comma-separated env value for a string-slice
+// field must load WITHOUT any config file present. go-config's decoder rejects a
+// bare string for a slice field and does not consult json.Unmarshaler, so
+// LoadInto splits these keys before decode. This is the env-only list path.
+func TestLoadIntoCommaListEnvOnly(t *testing.T) {
+	t.Setenv("OIDC_SCOPES", "openid,profile,email")
+	var out commaConfig
+	if err := LoadInto(context.Background(), "", &out); err != nil {
+		t.Fatalf("LoadInto: %v", err)
+	}
+	want := []string{"openid", "profile", "email"}
+	if !equalStrings(out.List, want) {
+		t.Fatalf("comma env-only: got %#v, want %#v", out.List, want)
+	}
+}
+
+// TestLoadIntoCommaListEnvSingle confirms a single env value (no commas) loads
+// as a one-element list, and surrounding whitespace/empty entries are trimmed.
+func TestLoadIntoCommaListEnvSingle(t *testing.T) {
+	t.Setenv("OIDC_SCOPES", " openid ,, profile ,")
+	var out commaConfig
+	if err := LoadInto(context.Background(), "", &out); err != nil {
+		t.Fatalf("LoadInto: %v", err)
+	}
+	want := []string{"openid", "profile"}
+	if !equalStrings(out.List, want) {
+		t.Fatalf("comma trim: got %#v, want %#v", out.List, want)
+	}
+}
+
+// TestLoadIntoCommaListFileArray confirms the file path is unaffected: a
+// JSON/YAML array still decodes as a slice (the resolver only rewrites string
+// values for these keys; arrays arrive as slices and are left untouched).
+func TestLoadIntoCommaListFileArray(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "cfg.json")
+	if err := os.WriteFile(p, []byte(`{"oidc_scopes":["openid","groups"]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out commaConfig
+	if err := LoadInto(context.Background(), p, &out); err != nil {
+		t.Fatalf("LoadInto: %v", err)
+	}
+	want := []string{"openid", "groups"}
+	if !equalStrings(out.List, want) {
+		t.Fatalf("file array: got %#v, want %#v", out.List, want)
+	}
+}
+
+// TestLoadIntoCommaListEnvOverridesFileArray confirms env (comma string) wins
+// over a file array for a list field, matching the documented env-overrides-file
+// precedence for every other key.
+func TestLoadIntoCommaListEnvOverridesFileArray(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "cfg.json")
+	if err := os.WriteFile(p, []byte(`{"oidc_scopes":["fromfile"]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("OIDC_SCOPES", "openid,profile")
+	var out commaConfig
+	if err := LoadInto(context.Background(), p, &out); err != nil {
+		t.Fatalf("LoadInto: %v", err)
+	}
+	want := []string{"openid", "profile"}
+	if !equalStrings(out.List, want) {
+		t.Fatalf("env override array: got %#v, want %#v", out.List, want)
+	}
+}
