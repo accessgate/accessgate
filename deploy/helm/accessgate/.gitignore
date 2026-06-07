@@ -1,0 +1,5 @@
+# Vendored chart dependencies are fetched on demand via:
+#   helm dependency build deploy/helm/accessgate
+# Do not commit the resolved Redis subchart; Chart.lock pins the version.
+charts/
+*.tgz

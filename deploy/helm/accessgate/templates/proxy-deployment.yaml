@@ -1,0 +1,187 @@
+{{- if .Values.proxy.enabled -}}
+{{- $component := "proxy" -}}
+{{- $cfg := .Values.proxy.config -}}
+{{- $grpc := .Values.proxy.grpc -}}
+{{- $bundle := .Values.proxy.policyBundle -}}
+{{- $sec := .Values.secrets -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "accessgate.componentFullname" (dict "context" . "component" $component) }}
+  labels:
+    {{- include "accessgate.componentLabels" (dict "context" . "component" $component) | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.proxy.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "accessgate.componentSelectorLabels" (dict "context" . "component" $component) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "accessgate.componentSelectorLabels" (dict "context" . "component" $component) | nindent 8 }}
+        {{- with .Values.proxy.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- if or $bundle.enabled .Values.proxy.podAnnotations }}
+      annotations:
+        {{- if $bundle.enabled }}
+        checksum/policy: {{ include (print $.Template.BasePath "/proxy-policy-configmap.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.proxy.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+    spec:
+      {{- include "accessgate.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "accessgate.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: accessgate-proxy
+          image: {{ include "accessgate.image" (dict "context" . "image" .Values.proxy.image) }}
+          imagePullPolicy: {{ .Values.proxy.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.proxy.httpPort }}
+              protocol: TCP
+            {{- if $grpc.enabled }}
+            - name: grpc
+              containerPort: {{ $grpc.port }}
+              protocol: TCP
+            {{- end }}
+          env:
+            - name: HTTP_PORT
+              value: {{ .Values.proxy.httpPort | quote }}
+            - name: AUTH_URL
+              value: {{ include "accessgate.authURL" . | quote }}
+            # --- Core (upstream_url required) ---
+            {{- with $cfg.upstreamURL }}
+            - name: UPSTREAM_URL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.proxyPathPrefix }}
+            - name: PROXY_PATH_PREFIX
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.requireAuth }}
+            - name: REQUIRE_AUTH
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.cookieName }}
+            - name: COOKIE_NAME
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.allowPrivateUpstreams }}
+            - name: ALLOW_PRIVATE_UPSTREAMS
+              value: {{ . | quote }}
+            {{- end }}
+            # --- Policy ---
+            {{- with $cfg.policyEngine }}
+            - name: POLICY_ENGINE
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if $bundle.enabled }}
+            - name: POLICY_BUNDLE_PATH
+              value: {{ printf "%s/%s" (trimSuffix "/" $bundle.mountPath) $bundle.fileName | quote }}
+            {{- else if $cfg.policyBundlePath }}
+            - name: POLICY_BUNDLE_PATH
+              value: {{ $cfg.policyBundlePath | quote }}
+            {{- end }}
+            {{- with $cfg.policyFallbackAllow }}
+            - name: POLICY_FALLBACK_ALLOW
+              value: {{ . | quote }}
+            {{- end }}
+            # --- Header claim mapping ---
+            {{- with $cfg.headersUserIDClaim }}
+            - name: HEADERS_USER_ID_CLAIM
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.headersEmailClaim }}
+            - name: HEADERS_EMAIL_CLAIM
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.headersNameClaim }}
+            - name: HEADERS_NAME_CLAIM
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.headersPreferredUsernameClaim }}
+            - name: HEADERS_PREFERRED_USERNAME_CLAIM
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.headersRolesClaim }}
+            - name: HEADERS_ROLES_CLAIM
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.headersGroupsClaim }}
+            - name: HEADERS_GROUPS_CLAIM
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.headersTenantIDClaim }}
+            - name: HEADERS_TENANT_ID_CLAIM
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.headersAdminRole }}
+            - name: HEADERS_ADMIN_ROLE
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if or $sec.existingSecret $sec.create.adminSecret }}
+            - name: ADMIN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "accessgate.secretName" . }}
+                  key: {{ $sec.secretKeys.adminSecret }}
+                  optional: true
+            {{- end }}
+            # --- gRPC (optional) ---
+            {{- if $grpc.enabled }}
+            - name: GRPC_LISTEN_ADDR
+              value: {{ $grpc.listenAddr | quote }}
+            {{- with $grpc.upstreamAddr }}
+            - name: GRPC_UPSTREAM_ADDR
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $grpc.upstreamInsecure }}
+            - name: GRPC_UPSTREAM_INSECURE
+              value: {{ . | quote }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.proxy.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if $bundle.enabled }}
+          volumeMounts:
+            - name: policy-bundle
+              mountPath: {{ $bundle.mountPath }}
+              readOnly: true
+          {{- end }}
+          livenessProbe:
+            {{- toYaml .Values.proxy.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.proxy.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.proxy.resources | nindent 12 }}
+      {{- if $bundle.enabled }}
+      volumes:
+        - name: policy-bundle
+          configMap:
+            name: {{ include "accessgate.componentFullname" (dict "context" . "component" "proxy") }}-policy
+      {{- end }}
+      {{- with .Values.proxy.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.proxy.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.proxy.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

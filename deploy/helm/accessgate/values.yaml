@@ -1,0 +1,350 @@
+# Default values for the AccessGate chart.
+#
+# This file mirrors the configuration keys documented in docs/CONFIG-KEYS.md.
+# Each setting under `auth` and `proxy` is mapped to the matching
+# UPPER_SNAKE_CASE environment variable consumed by the binaries (the env-only
+# loader described in CONFIG-KEYS.md). Empty/omitted values fall back to the
+# binary's own defaults; only the keys CONFIG-KEYS.md marks "required" must be
+# supplied here (or via a secret).
+#
+# Secrets (OIDC client secret, cookie signing secret, optional admin secret)
+# are NEVER rendered into a ConfigMap. They are sourced from a Kubernetes Secret
+# created by this chart (see `secrets.*`) or an existing one
+# (`secrets.existingSecret`) and injected via secretKeyRef.
+
+# -- Global image registry / pull secrets applied to every image, including the
+# Redis subchart. Leave registry empty to use the per-image repository as-is.
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+# -- Override the chart name used in resource names / labels.
+nameOverride: ""
+# -- Fully override the release-qualified name used for resources.
+fullnameOverride: ""
+
+# ---------------------------------------------------------------------------
+# Service account shared by both deployments.
+# ---------------------------------------------------------------------------
+serviceAccount:
+  # -- Create a dedicated ServiceAccount.
+  create: true
+  # -- Name to use. Generated from the fullname when empty.
+  name: ""
+  # -- Annotations for the ServiceAccount (e.g. cloud IAM role bindings).
+  annotations: {}
+  # -- Mount the SA token into the pods. Off by default (the services do not
+  # call the Kubernetes API).
+  automountServiceAccountToken: false
+
+# -- Image pull secrets applied to both deployments and the ServiceAccount.
+imagePullSecrets: []
+
+# ---------------------------------------------------------------------------
+# Pod-level security context shared defaults. Matches the distroless,
+# non-root (uid 65532) images published to GHCR.
+# ---------------------------------------------------------------------------
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# ===========================================================================
+# accessgate-auth — OIDC session / login service.
+# ===========================================================================
+auth:
+  # -- Enable the auth Deployment + Service.
+  enabled: true
+  replicaCount: 2
+
+  image:
+    repository: ghcr.io/accessgate/accessgate-auth
+    # -- Image tag. Defaults to .Chart.AppVersion when left empty.
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 8080
+    annotations: {}
+
+  # -- Container port the auth HTTP server listens on (config key: http_port).
+  httpPort: 8080
+
+  # Config (docs/CONFIG-KEYS.md → accessgate-auth). Each key is rendered as the
+  # matching UPPER_SNAKE_CASE env var only when non-empty.
+  config:
+    # OIDC (oidc_issuer / oidc_redirect_uri / oidc_client_id are REQUIRED).
+    oidcIssuer: ""        # OIDC_ISSUER — issuer URL used for discovery.
+    oidcRedirectURI: ""   # OIDC_REDIRECT_URI — callback URI registered with the IdP.
+    oidcClientID: ""      # OIDC_CLIENT_ID — OIDC client ID.
+    # OIDC_SCOPES: the env-only loader rejects a comma string, so leave this
+    # empty to take the built-in default ["openid","profile"]. To customise
+    # scopes mount a config file (out of scope for this chart's env mapping).
+    oidcScopes: ""
+    oidcAudience: ""      # OIDC_AUDIENCE
+    oidcClaimsSource: ""  # OIDC_CLAIMS_SOURCE — id_token (default) or access_token.
+
+    # App + redirects (app_base_url is REQUIRED).
+    appBaseURL: ""        # APP_BASE_URL — base URL of the application/portal.
+    loginErrorRedirectPath: ""  # LOGIN_ERROR_REDIRECT_PATH
+
+    # Cookie. cookie_signing_secret is REQUIRED and supplied via secrets.* —
+    # do NOT put it here.
+    cookieName: ""        # COOKIE_NAME — default __Host-ess_session.
+    cookieSecure: "true"  # COOKIE_SECURE — true for production HTTPS.
+    cookieSameSite: ""    # COOKIE_SAME_SITE — strict | none | lax (default lax).
+    cookieDomain: ""      # COOKIE_DOMAIN — empty for host-only cookies.
+
+    # Session TTLs (seconds). Empty = binary default.
+    sessionRedisPrefix: ""          # SESSION_REDIS_PREFIX (default "auth")
+    sessionTTLSeconds: ""           # SESSION_TTL_SECONDS (default 36000)
+    sessionPKCETTLSeconds: ""       # SESSION_PKCE_TTL_SECONDS (default 300)
+    sessionRefreshLockTTLSeconds: "" # SESSION_REFRESH_LOCK_TTL_SECONDS (default 15)
+    sessionRefreshEarlySeconds: ""  # SESSION_REFRESH_EARLY_SECONDS (default 60)
+
+  # -- Extra raw env vars (list of {name,value} or {name,valueFrom}).
+  extraEnv: []
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+  # Probes. /livez and /readyz are served by the auth HTTP server
+  # (internal/auth/httpserver/server.go). /readyz also pings Redis.
+  livenessProbe:
+    httpGet:
+      path: /livez
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /readyz
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ===========================================================================
+# accessgate-proxy — policy-enforcing reverse proxy (the entry point).
+# ===========================================================================
+proxy:
+  # -- Enable the proxy Deployment + Service.
+  enabled: true
+  replicaCount: 2
+
+  image:
+    repository: ghcr.io/accessgate/accessgate-proxy
+    # -- Image tag. Defaults to .Chart.AppVersion when left empty.
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 8081
+    annotations: {}
+
+  # -- Container port the proxy HTTP server listens on (config key: http_port).
+  httpPort: 8081
+
+  # Config (docs/CONFIG-KEYS.md → accessgate-proxy).
+  config:
+    # Core. upstream_url is REQUIRED. auth_url is REQUIRED but defaults to the
+    # in-cluster auth Service when left empty (see proxy deployment template).
+    upstreamURL: ""       # UPSTREAM_URL — upstream the proxy forwards to (http/https).
+    authURL: ""           # AUTH_URL — base URL of accessgate-auth; empty = in-cluster auth Service.
+    proxyPathPrefix: ""   # PROXY_PATH_PREFIX — default /graphql.
+    requireAuth: "false"  # REQUIRE_AUTH — require an authenticated session.
+    cookieName: ""        # COOKIE_NAME — must match the auth service.
+    # SSRF guard. Leave false in production; the upstream must be a routable,
+    # non-private address unless you knowingly relax this.
+    allowPrivateUpstreams: "false"  # ALLOW_PRIVATE_UPSTREAMS
+
+    # Policy.
+    policyEngine: ""      # POLICY_ENGINE — wasm (default) or rego.
+    policyBundlePath: ""  # POLICY_BUNDLE_PATH — path to .wasm/.rego bundle (see policyBundle).
+    policyFallbackAllow: "false"  # POLICY_FALLBACK_ALLOW — fail-open if true (default deny).
+
+    # Header claim mapping (empty = binary defaults; see CONFIG-KEYS.md).
+    headersUserIDClaim: ""            # HEADERS_USER_ID_CLAIM (default sub)
+    headersEmailClaim: ""             # HEADERS_EMAIL_CLAIM (default email)
+    headersNameClaim: ""              # HEADERS_NAME_CLAIM (default name)
+    headersPreferredUsernameClaim: "" # HEADERS_PREFERRED_USERNAME_CLAIM
+    headersRolesClaim: ""             # HEADERS_ROLES_CLAIM (default realm_access.roles)
+    headersGroupsClaim: ""            # HEADERS_GROUPS_CLAIM (default groups)
+    headersTenantIDClaim: ""          # HEADERS_TENANT_ID_CLAIM (no default)
+    headersAdminRole: ""              # HEADERS_ADMIN_ROLE (default admin)
+
+  # gRPC (optional). grpcListenAddr enables the proxy gRPC server; grpcUpstreamAddr
+  # turns on transparent gRPC forwarding to a backend (see docs/GUIDE-GRPC.md).
+  grpc:
+    # -- Enable the gRPC listener + a gRPC port on the Service.
+    enabled: false
+    # -- GRPC_LISTEN_ADDR, e.g. ":9091". Used when grpc.enabled=true.
+    listenAddr: ":9091"
+    # -- Service/container port number derived for the gRPC listener.
+    port: 9091
+    # -- GRPC_UPSTREAM_ADDR — upstream gRPC backend host:port. Empty keeps the
+    # legacy Unimplemented behavior.
+    upstreamAddr: ""
+    # -- GRPC_UPSTREAM_INSECURE — dial upstream over plaintext (dev/in-cluster).
+    upstreamInsecure: "false"
+
+  # Optional inline policy bundle. When set, the contents are written to a
+  # ConfigMap, mounted read-only, and POLICY_BUNDLE_PATH points at it.
+  policyBundle:
+    # -- Mount an inline policy bundle from `content`.
+    enabled: false
+    # -- Filename used for the mounted bundle (e.g. policy.rego or policy.wasm).
+    fileName: policy.rego
+    # -- Directory the bundle is mounted under.
+    mountPath: /etc/accessgate/policy
+    # -- Inline bundle content (string). Only used when enabled=true.
+    content: ""
+
+  # -- Extra raw env vars (list of {name,value} or {name,valueFrom}).
+  extraEnv: []
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+  # Probes. /livez and /readyz are served by the proxy HTTP server
+  # (internal/proxy/httpserver/server.go).
+  livenessProbe:
+    httpGet:
+      path: /livez
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /readyz
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ===========================================================================
+# Secrets.
+#
+# Provide either inline values (a Secret is created for you) OR the name of an
+# existing Secret you manage out-of-band.
+#
+# When existingSecret is empty:
+#   - A Secret named "<fullname>-secrets" is created from secrets.create.* below.
+#
+# When existingSecret is set:
+#   - No Secret is created. The named Secret must contain the keys named by
+#     secretKeys.* below. Populate, for example, with:
+#       kubectl create secret generic my-accessgate-secrets \
+#         --from-literal=cookie-signing-secret=... \
+#         --from-literal=oidc-client-secret=...
+# ===========================================================================
+secrets:
+  # -- Name of an existing Secret to consume. Empty = create one from create.*.
+  existingSecret: ""
+
+  # Keys (within the Secret, inline or existing) that hold each value. Override
+  # only if your existingSecret uses different key names.
+  secretKeys:
+    cookieSigningSecret: cookie-signing-secret
+    oidcClientSecret: oidc-client-secret
+    adminSecret: admin-secret
+
+  # Inline secret values. Used only when existingSecret is empty. Supply real
+  # values via `--set-string` / a values override / a sealed-secrets workflow —
+  # do not commit production secrets.
+  create:
+    # -- COOKIE_SIGNING_SECRET (REQUIRED). Generate with `openssl rand -hex 32`.
+    cookieSigningSecret: ""
+    # -- OIDC_CLIENT_SECRET (optional; required by most real IdPs).
+    oidcClientSecret: ""
+    # -- ADMIN_SECRET (optional). Guards /admin + /internal/session when set.
+    adminSecret: ""
+
+# ===========================================================================
+# Redis session store.
+#
+# enabled=true  → the bundled Bitnami Redis subchart is deployed and
+#                 accessgate-auth's REDIS_URL points at its service.
+# enabled=false → the subchart is NOT deployed; set externalRedis.url to your
+#                 own (HA) Redis. Wire REDIS_URL there.
+#
+# To switch to an external / HA Redis:
+#   --set redis.enabled=false \
+#   --set externalRedis.url=redis://my-redis:6379
+# (or rediss:// for TLS; include credentials in the URL or supply a Secret out
+# of band and reference it via auth.extraEnv).
+#
+# Keys under `redis` other than `enabled` are passed through to the Bitnami
+# subchart (https://github.com/bitnami/charts/tree/main/bitnami/redis).
+# ===========================================================================
+redis:
+  # -- Deploy the bundled Bitnami Redis subchart.
+  enabled: true
+  # Bitnami Redis values (subset). See the upstream chart for the full set.
+  architecture: standalone
+  auth:
+    # -- Disable Redis AUTH for the in-cluster session store by default. Enable
+    # and provide a password for production; then build REDIS_URL accordingly
+    # via externalRedis.url or auth.extraEnv.
+    enabled: false
+  master:
+    persistence:
+      # Session data is ephemeral (sessions live with TTLs); persistence off by
+      # default. Enable for durability across restarts.
+      enabled: false
+  replica:
+    replicaCount: 0
+
+# External Redis used when redis.enabled=false.
+externalRedis:
+  # -- Full Redis connection URL, e.g. redis://host:6379 or rediss://host:6380.
+  # Required when redis.enabled=false.
+  url: ""
+
+# -- Extra labels applied to all chart-managed resources.
+commonLabels: {}
+# -- Extra annotations applied to all chart-managed resources.
+commonAnnotations: {}

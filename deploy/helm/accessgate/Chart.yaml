@@ -1,0 +1,43 @@
+apiVersion: v2
+name: accessgate
+description: |
+  AccessGate — OIDC session/login service (accessgate-auth) and a
+  policy-enforcing reverse proxy (accessgate-proxy), with a bundled Redis
+  session store. Deploys the two core distroless, non-root services published
+  to GHCR and wires their environment-mapped configuration, health probes, and
+  secrets.
+type: application
+
+# Chart version. Bump on every change to the chart itself (templates/values),
+# independently of the application version below.
+version: 0.1.0
+
+# Version of the AccessGate application this chart deploys by default. Used as
+# the default image tag for both auth and proxy when image.tag is left empty.
+# Pin this to a published release tag of ghcr.io/accessgate/accessgate-*.
+appVersion: "0.5.0"
+
+home: https://github.com/accessgate/accessgate
+sources:
+  - https://github.com/accessgate/accessgate
+keywords:
+  - oidc
+  - authentication
+  - authorization
+  - reverse-proxy
+  - policy
+  - gateway
+maintainers:
+  - name: AccessGate maintainers
+    url: https://github.com/accessgate/accessgate
+
+# Bundled session store. The Bitnami Redis chart is pulled from Docker Hub's
+# OCI registry and is enabled by default (redis.enabled=true). Set
+# redis.enabled=false to disable the subchart and point accessgate-auth at an
+# external/HA Redis via externalRedis.url. The pinned version below is resolved
+# by `helm dependency build`.
+dependencies:
+  - name: redis
+    version: 20.13.4
+    repository: oci://registry-1.docker.io/bitnamicharts
+    condition: redis.enabled

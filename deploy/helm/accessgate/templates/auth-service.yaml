@@ -1,0 +1,22 @@
+{{- if .Values.auth.enabled -}}
+{{- $component := "auth" -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "accessgate.componentFullname" (dict "context" . "component" $component) }}
+  labels:
+    {{- include "accessgate.componentLabels" (dict "context" . "component" $component) | nindent 4 }}
+  {{- with (mergeOverwrite (deepCopy .Values.commonAnnotations) .Values.auth.service.annotations) }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.auth.service.type }}
+  selector:
+    {{- include "accessgate.componentSelectorLabels" (dict "context" . "component" $component) | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.auth.service.port }}
+      targetPort: http
+      protocol: TCP
+{{- end }}

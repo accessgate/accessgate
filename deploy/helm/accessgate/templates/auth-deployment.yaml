@@ -1,0 +1,167 @@
+{{- if .Values.auth.enabled -}}
+{{- $component := "auth" -}}
+{{- $cfg := .Values.auth.config -}}
+{{- $sec := .Values.secrets -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "accessgate.componentFullname" (dict "context" . "component" $component) }}
+  labels:
+    {{- include "accessgate.componentLabels" (dict "context" . "component" $component) | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.auth.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "accessgate.componentSelectorLabels" (dict "context" . "component" $component) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "accessgate.componentSelectorLabels" (dict "context" . "component" $component) | nindent 8 }}
+        {{- with .Values.auth.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.auth.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "accessgate.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "accessgate.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: accessgate-auth
+          image: {{ include "accessgate.image" (dict "context" . "image" .Values.auth.image) }}
+          imagePullPolicy: {{ .Values.auth.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.auth.httpPort }}
+              protocol: TCP
+          env:
+            - name: HTTP_PORT
+              value: {{ .Values.auth.httpPort | quote }}
+            - name: REDIS_URL
+              value: {{ include "accessgate.redisURL" . | quote }}
+            # --- Secrets (never from ConfigMap) ---
+            - name: COOKIE_SIGNING_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "accessgate.secretName" . }}
+                  key: {{ $sec.secretKeys.cookieSigningSecret }}
+            {{- if or $sec.existingSecret $sec.create.oidcClientSecret }}
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "accessgate.secretName" . }}
+                  key: {{ $sec.secretKeys.oidcClientSecret }}
+                  optional: true
+            {{- end }}
+            {{- if or $sec.existingSecret $sec.create.adminSecret }}
+            - name: ADMIN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "accessgate.secretName" . }}
+                  key: {{ $sec.secretKeys.adminSecret }}
+                  optional: true
+            {{- end }}
+            # --- OIDC (required: issuer, redirectURI, clientID) ---
+            {{- with $cfg.oidcIssuer }}
+            - name: OIDC_ISSUER
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.oidcRedirectURI }}
+            - name: OIDC_REDIRECT_URI
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.oidcClientID }}
+            - name: OIDC_CLIENT_ID
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.oidcScopes }}
+            - name: OIDC_SCOPES
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.oidcAudience }}
+            - name: OIDC_AUDIENCE
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.oidcClaimsSource }}
+            - name: OIDC_CLAIMS_SOURCE
+              value: {{ . | quote }}
+            {{- end }}
+            # --- App + redirects ---
+            {{- with $cfg.appBaseURL }}
+            - name: APP_BASE_URL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.loginErrorRedirectPath }}
+            - name: LOGIN_ERROR_REDIRECT_PATH
+              value: {{ . | quote }}
+            {{- end }}
+            # --- Cookie ---
+            {{- with $cfg.cookieName }}
+            - name: COOKIE_NAME
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.cookieSecure }}
+            - name: COOKIE_SECURE
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.cookieSameSite }}
+            - name: COOKIE_SAME_SITE
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.cookieDomain }}
+            - name: COOKIE_DOMAIN
+              value: {{ . | quote }}
+            {{- end }}
+            # --- Session TTLs ---
+            {{- with $cfg.sessionRedisPrefix }}
+            - name: SESSION_REDIS_PREFIX
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.sessionTTLSeconds }}
+            - name: SESSION_TTL_SECONDS
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.sessionPKCETTLSeconds }}
+            - name: SESSION_PKCE_TTL_SECONDS
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.sessionRefreshLockTTLSeconds }}
+            - name: SESSION_REFRESH_LOCK_TTL_SECONDS
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $cfg.sessionRefreshEarlySeconds }}
+            - name: SESSION_REFRESH_EARLY_SECONDS
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.auth.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          livenessProbe:
+            {{- toYaml .Values.auth.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.auth.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.auth.resources | nindent 12 }}
+      {{- with .Values.auth.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.auth.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.auth.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
