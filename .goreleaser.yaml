@@ -1,6 +1,8 @@
 # GoReleaser config for accessgate: OS/arch archives plus multi-arch container
 # images (ADR-0005). Images are built from the checked-in multi-stage
-# Dockerfiles in build/docker/ and published to GHCR on v* tags.
+# Dockerfiles in build/docker/ and published to GHCR (canonical) and Docker Hub
+# (mirror) on v* tags. Each per-arch image is built once and tagged for both
+# registries, so the digests are identical across ghcr.io and docker.io.
 version: 2
 
 project_name: accessgate
@@ -67,7 +69,9 @@ signs:
 
 # Keyless cosign signature of the published container images. Each image and
 # manifest is signed by digest (cosign resolves ${artifact} to the pushed
-# ref); the signature is stored as an OCI artifact in GHCR next to the image.
+# ref); the signature is stored as an OCI artifact next to the image in the
+# registry it was pushed to (GHCR and Docker Hub alike — `artifacts: all`
+# covers every pushed image and manifest in both registries).
 docker_signs:
   - id: image-keyless
     cmd: cosign
@@ -106,6 +110,7 @@ dockers:
       - proto
     image_templates:
       - "ghcr.io/accessgate/accessgate-auth:{{ .Version }}-amd64"
+      - "docker.io/accessgate/accessgate-auth:{{ .Version }}-amd64"
     build_flag_templates:
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.title=accessgate-auth"
@@ -131,6 +136,7 @@ dockers:
       - proto
     image_templates:
       - "ghcr.io/accessgate/accessgate-auth:{{ .Version }}-arm64"
+      - "docker.io/accessgate/accessgate-auth:{{ .Version }}-arm64"
     build_flag_templates:
       - "--platform=linux/arm64"
       - "--label=org.opencontainers.image.title=accessgate-auth"
@@ -157,6 +163,7 @@ dockers:
       - proto
     image_templates:
       - "ghcr.io/accessgate/accessgate-proxy:{{ .Version }}-amd64"
+      - "docker.io/accessgate/accessgate-proxy:{{ .Version }}-amd64"
     build_flag_templates:
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.title=accessgate-proxy"
@@ -182,6 +189,7 @@ dockers:
       - proto
     image_templates:
       - "ghcr.io/accessgate/accessgate-proxy:{{ .Version }}-arm64"
+      - "docker.io/accessgate/accessgate-proxy:{{ .Version }}-arm64"
     build_flag_templates:
       - "--platform=linux/arm64"
       - "--label=org.opencontainers.image.title=accessgate-proxy"
@@ -212,6 +220,24 @@ docker_manifests:
     image_templates:
       - "ghcr.io/accessgate/accessgate-proxy:{{ .Version }}-amd64"
       - "ghcr.io/accessgate/accessgate-proxy:{{ .Version }}-arm64"
+  # Docker Hub mirrors of the same manifests (the per-arch digests are shared
+  # with GHCR because each image is built once and tagged for both registries).
+  - name_template: "docker.io/accessgate/accessgate-auth:{{ .Version }}"
+    image_templates:
+      - "docker.io/accessgate/accessgate-auth:{{ .Version }}-amd64"
+      - "docker.io/accessgate/accessgate-auth:{{ .Version }}-arm64"
+  - name_template: "docker.io/accessgate/accessgate-auth:latest"
+    image_templates:
+      - "docker.io/accessgate/accessgate-auth:{{ .Version }}-amd64"
+      - "docker.io/accessgate/accessgate-auth:{{ .Version }}-arm64"
+  - name_template: "docker.io/accessgate/accessgate-proxy:{{ .Version }}"
+    image_templates:
+      - "docker.io/accessgate/accessgate-proxy:{{ .Version }}-amd64"
+      - "docker.io/accessgate/accessgate-proxy:{{ .Version }}-arm64"
+  - name_template: "docker.io/accessgate/accessgate-proxy:latest"
+    image_templates:
+      - "docker.io/accessgate/accessgate-proxy:{{ .Version }}-amd64"
+      - "docker.io/accessgate/accessgate-proxy:{{ .Version }}-arm64"
 
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
