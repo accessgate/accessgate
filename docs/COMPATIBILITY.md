@@ -255,12 +255,24 @@ code changes mandated by this doc; they are decisions to lock deliberately.
   explicit).
 - [ ] **Proto:** one-time review of v1 message field numbering for long-term
   additive headroom; confirm no message needs a pre-freeze restructure.
-- [ ] **Go API:** decide the fate of incidentally-exported symbols —
-  `token.Metrics` vs `observability.Metrics` duplication, the low-level
-  `cookie.Encrypt`/`Decrypt` primitives, and whether the various `Nop*` impls are
-  intended public surface. Unexport/move anything that should be internal *now*.
-- [ ] **Go API:** confirm the `session.RuntimeStoreProvider` /
-  `ExtendedRuntimeStoreProvider` split is the intended frozen shape.
+- [x] **Go API:** decided the fate of incidentally-exported symbols (#101).
+  Decisions: **`cookie.Encrypt`/`Decrypt`** — unexported to `encrypt`/`decrypt`;
+  they are low-level AES-GCM primitives consumed only by the codec, and external
+  callers should use the high-level `EncodeValue`/`DecodeValue` / `Codec` /
+  `Manager` (the `ErrDecrypt` sentinel stays exported, as `Codec.Decode` can
+  return it). **`token.NopMetrics`** — unexported to `nopMetrics`; it was only the
+  internal nil-guard default and a same-package test, never used by external
+  callers. **`token.Metrics`** — kept: it is a deliberately minimal
+  consumer-defined interface so `pkg/token` need not depend on `pkg/observability`
+  (the superset `observability.Metrics` structurally satisfies it); documented as
+  intentional. **`observability.NopMetrics` / `NopLogger` / `NopTracer`** — kept
+  exported: genuinely useful no-op testing seams for external integrators (and
+  used as internal defaults); documented as intended surface.
+- [x] **Go API:** confirmed the `session.RuntimeStoreProvider` /
+  `ExtendedRuntimeStoreProvider` split is the intended frozen shape (#101) — a
+  deliberate interface-segregation pair (narrow consumer interface + broader
+  capability interface implemented by concrete stores), not a vestigial
+  deprecation step. Documented the intent on both interfaces.
 - [ ] **Tooling (follow-up issue under #86):** add an `apidiff`/`gorelease` CI
   gate for `pkg/**` to mechanically enforce the Go SemVer promise — parity with
   the existing `buf breaking` and `make schema` gates.

@@ -40,14 +40,24 @@ type ReplayStore interface {
 	CheckReplay(ctx context.Context, key string) (alreadySeen bool, err error)
 }
 
-// RuntimeStoreProvider exposes the minimum persistence seams the auth runtime needs.
+// RuntimeStoreProvider exposes the minimum persistence seams the auth runtime needs
+// (session, PKCE, refresh-lock). It is intentionally the narrow consumer interface the
+// auth service depends on — keeping the service free of stores it does not use.
+//
+// RuntimeStoreProvider and ExtendedRuntimeStoreProvider are a deliberate
+// interface-segregation pair, not a deprecation step: the narrow interface is what
+// consumers depend on, while the extended one is the broader capability set that a
+// concrete store (e.g. the Redis store) implements. Both are part of the frozen v1 API;
+// new persistence seams are added on the extended interface, never on this one.
 type RuntimeStoreProvider interface {
 	SessionStore() SessionStore
 	PKCEStore() PKCEStore
 	RefreshLockStore() RefreshLockStore
 }
 
-// ExtendedRuntimeStoreProvider exposes adjacent persistence seams that stay behind stable interfaces.
+// ExtendedRuntimeStoreProvider is the broader capability interface: the core runtime
+// seams plus the adjacent revocation/replay seams. Concrete stores implement this; the
+// split from RuntimeStoreProvider is intended (see that type's doc), not vestigial.
 type ExtendedRuntimeStoreProvider interface {
 	RuntimeStoreProvider
 	RevocationStore() RevocationStore

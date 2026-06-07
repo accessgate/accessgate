@@ -32,7 +32,7 @@ func EncodeValue(v any, key []byte) (string, error) {
 		return "", err
 	}
 	if len(key) > 0 {
-		data, err = Encrypt(data, key)
+		data, err = encrypt(data, key)
 		if err != nil {
 			return "", err
 		}
@@ -50,7 +50,7 @@ func DecodeValue(raw string, dst any, key []byte) error {
 		return ErrCodecDecode
 	}
 	if len(key) > 0 {
-		data, err = Decrypt(data, key)
+		data, err = decrypt(data, key)
 		if err != nil {
 			return err
 		}

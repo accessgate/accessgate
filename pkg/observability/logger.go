@@ -8,7 +8,8 @@ type Logger interface {
 	With(keyvals ...any) Logger
 }
 
-// NopLogger discards all log output.
+// NopLogger discards all log output. It is intended public surface: a no-op Logger
+// implementation usable by external integrators and as a default in tests.
 type NopLogger struct{}
 
 // Info implements Logger.

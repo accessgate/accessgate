@@ -212,7 +212,7 @@ func TestHTTPJWKSSource_JWKSFetchError(t *testing.T) {
 
 func TestHTTPJWKSSource_Defaults(t *testing.T) {
 	// Zero TTL should not panic and should default internally; nil metrics
-	// should be replaced by NopMetrics.
+	// should be replaced by the internal no-op metrics.
 	src := NewHTTPJWKSSource(0, nil)
 	if src.ttl != 5*time.Minute {
 		t.Fatalf("expected default 5m TTL, got %v", src.ttl)
@@ -223,7 +223,7 @@ func TestHTTPJWKSSource_Defaults(t *testing.T) {
 }
 
 func TestNopMetrics_NoPanic(t *testing.T) {
-	var m NopMetrics
+	var m nopMetrics
 	m.JWKSCacheHit("x")
 	m.JWKSCacheMiss("x")
 }

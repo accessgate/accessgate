@@ -9,7 +9,7 @@ func TestEncryptDecryptRoundTrip(t *testing.T) {
 	plaintext := []byte("hello")
 	key := []byte("dummy-key")
 
-	ciphertext, err := Encrypt(plaintext, key)
+	ciphertext, err := encrypt(plaintext, key)
 	if err != nil {
 		t.Fatalf("Encrypt returned error: %v", err)
 	}
@@ -17,7 +17,7 @@ func TestEncryptDecryptRoundTrip(t *testing.T) {
 		t.Fatal("Encrypt should not return plaintext as-is")
 	}
 
-	out, err := Decrypt(ciphertext, key)
+	out, err := decrypt(ciphertext, key)
 	if err != nil {
 		t.Fatalf("Decrypt returned error: %v", err)
 	}
@@ -30,12 +30,12 @@ func TestEncryptDecryptRoundTrip(t *testing.T) {
 func TestDecrypt_WrongKey(t *testing.T) {
 	key := []byte("encryption-key-32-bytes-long!!!!!")
 	plain := []byte("secret")
-	ct, err := Encrypt(plain, key)
+	ct, err := encrypt(plain, key)
 	if err != nil {
 		t.Fatalf("Encrypt: %v", err)
 	}
 	wrongKey := []byte("wrong-key-32-bytes-long!!!!!!!!!")
-	_, err = Decrypt(ct, wrongKey)
+	_, err = decrypt(ct, wrongKey)
 	if err == nil {
 		t.Fatal("expected error when decrypting with wrong key")
 	}
