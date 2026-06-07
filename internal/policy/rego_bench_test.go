@@ -67,14 +67,55 @@ func BenchmarkPolicyEvaluate_Rego(b *testing.B) {
 	})
 }
 
-// BenchmarkPolicyEvaluate_WASM measures the WASM runtime's evaluate path.
-//
-// No checked-in WASM policy bundle fixture exists yet, so this benchmark
-// exercises the no-module fallback path (input marshal guard -> fallback
-// decision), which is deterministic and hermetic. Benchmarking a real compiled
-// bundle end-to-end (host call + JSON round-trip across linear memory) is a
-// follow-up once a small fixture bundle is committed; see docs/BENCHMARKING.md.
+// benchWASMFixture is the committed WASM policy bundle exercised by
+// BenchmarkPolicyEvaluate_WASM. It implements the runtime's custom ABI and
+// branches on the request Path ("/public" -> allow 200, else deny 403). See
+// internal/policy/testdata/README.md for how it is built and regenerated.
+const benchWASMFixture = "testdata/bench_policy.wasm"
+
+// BenchmarkPolicyEvaluate_WASM measures a single Evaluate against the committed
+// WASM bundle fixture on both the allow and deny branches. This exercises the
+// real end-to-end path: marshaling the input, writing it into the module's
+// linear memory, the exported evaluate host call, and reading + unmarshaling the
+// decision JSON back out of memory. Compilation/instantiation happens once,
+// outside the timed loop, so the benchmark measures evaluation.
 func BenchmarkPolicyEvaluate_WASM(b *testing.B) {
+	w := NewWASMRuntime(DefaultFallbackDeny)
+	if err := w.Load(benchWASMFixture); err != nil {
+		b.Fatalf("Load(%s): %v", benchWASMFixture, err)
+	}
+	ctx := context.Background()
+
+	b.Run("Allow", func(b *testing.B) {
+		in := Input{Protocol: "http", Method: "GET", Path: "/public"}
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			dec, err := w.Evaluate(ctx, in)
+			if err != nil || !dec.Allow || dec.StatusCode != 200 {
+				b.Fatalf("unexpected: dec=%#v err=%v", dec, err)
+			}
+		}
+	})
+
+	b.Run("Deny", func(b *testing.B) {
+		in := Input{Protocol: "http", Method: "GET", Path: "/admin"}
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			dec, err := w.Evaluate(ctx, in)
+			if err != nil || dec.Allow || dec.StatusCode != 403 {
+				b.Fatalf("unexpected: dec=%#v err=%v", dec, err)
+			}
+		}
+	})
+}
+
+// BenchmarkPolicyEvaluate_WASMFallback measures the WASM runtime's no-module
+// fallback path (no bundle loaded -> deterministic fallback decision, no host
+// call). It is the cheap floor for comparison against the real-bundle numbers
+// above.
+func BenchmarkPolicyEvaluate_WASMFallback(b *testing.B) {
 	w := NewWASMRuntime(DefaultFallbackDeny)
 	ctx := context.Background()
 	in := Input{Protocol: "http", Method: "GET", Path: "/api/v1/resource"}
