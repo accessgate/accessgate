@@ -68,6 +68,7 @@ type Service struct {
 	handoff       *handoff.Issuer
 	tracer        observability.Tracer
 	metrics       observability.Metrics
+	connMetrics   observability.ConnectorMetrics
 	logger        *log.Logger
 	webhookClient *http.Client
 }
@@ -161,6 +162,12 @@ func newService(
 	if metrics == nil {
 		metrics = observability.NopMetrics{}
 	}
+	// Optional, additive multi-connector counters (PrometheusMetrics provides them); fall back
+	// to a no-op sink for Metrics implementations that don't.
+	var connMetrics observability.ConnectorMetrics = observability.NopMetrics{}
+	if cm, ok := metrics.(observability.ConnectorMetrics); ok {
+		connMetrics = cm
+	}
 	s := &Service{
 		cfg:           cfg,
 		connectors:    make(map[string]*connector, len(connectors)),
@@ -168,6 +175,7 @@ func newService(
 		cookie:        cookieManager,
 		tracer:        tracer,
 		metrics:       metrics,
+		connMetrics:   connMetrics,
 		logger:        log.New(log.Writer(), "[accessgate-auth] ", log.LstdFlags|log.LUTC),
 		webhookClient: &http.Client{Timeout: 5 * time.Second},
 	}
@@ -352,7 +360,7 @@ func (s *Service) LoginEnd(ctx context.Context, req auth.LoginEndRequest) (*auth
 	if err != nil {
 		return nil, err
 	}
-	defer func() { s.metrics.ConnectorCallback(c.cfg.ID, success) }()
+	defer func() { s.connMetrics.ConnectorCallback(c.cfg.ID, success) }()
 
 	if req.Error != "" {
 		redirectURL := s.cfg.AppBaseURL + s.cfg.LoginErrorRedirectPath
@@ -927,11 +935,11 @@ func (s *Service) IssueHandoff(ctx context.Context, connectorID, subject, email 
 	if err != nil {
 		return "", err
 	}
-	ctx, span := s.tracer.StartSpan(ctx, "auth.handoff_issue", "connector", c.cfg.ID)
+	_, span := s.tracer.StartSpan(ctx, "auth.handoff_issue", "connector", c.cfg.ID)
 	defer span.End()
 	authID := getClaimString(sess.Claims, "sub")
 	ticket, err := s.handoff.Issue(c.cfg.ID, authID, sess.ID, jti)
-	s.metrics.HandoffIssued(c.cfg.ID, err == nil)
+	s.connMetrics.HandoffIssued(c.cfg.ID, err == nil)
 	return ticket, err
 }
 
@@ -950,7 +958,7 @@ func (s *Service) RedeemHandoff(ctx context.Context, connectorID, ticket string)
 		if label == "" {
 			label = connectorID
 		}
-		s.metrics.HandoffRedeemed(label, err == nil)
+		s.connMetrics.HandoffRedeemed(label, err == nil)
 	}()
 	t, err := s.handoff.Redeem(ctx, ticket)
 	if err != nil {

@@ -34,8 +34,9 @@ type Server struct {
 func (s *Server) SetMetrics(m observability.Metrics) { s.metrics = m }
 
 func (s *Server) recordOutcome(route, outcome string) {
-	if s.metrics != nil {
-		s.metrics.ProxyRouteOutcome(route, outcome)
+	// ProxyRouteOutcome is an optional, additive metrics extension (see observability.ConnectorMetrics).
+	if cm, ok := s.metrics.(observability.ConnectorMetrics); ok {
+		cm.ProxyRouteOutcome(route, outcome)
 	}
 }
 
