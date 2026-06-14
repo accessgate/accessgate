@@ -26,6 +26,15 @@ They communicate over HTTP. The proxy never touches Redis or the IdP directly; i
 `accessgate-auth` to turn a session cookie into a principal. See
 [ADR-0002](adr/0002-auth-proxy-split.md) for the rationale.
 
+Each binary is **multi-tenant within itself** (see [ADR-0006](adr/0006-multi-connector-auth-and-multi-route-proxy.md)):
+one `accessgate-auth` hosts many **connectors** (e.g. primary SSO + Telegram), each with its own
+provider, Redis-namespaced sessions, cookie, and claim-mapping policy, selected by a `/login/{connector}`
+path segment. One `accessgate-proxy` serves many **routes**, each with its own upstream, auth policy,
+and unauthenticated behavior (`api_401` vs `html_redirect`), selected by host + longest-path-prefix.
+Connectors can hand a browser into a web session via a signed one-time **handoff ticket**
+(`internal/auth/handoff`). Both lists are backward compatible: with no `connectors`/`routes`, a single
+`default` is synthesized from the legacy singular config.
+
 ```
                         Browser / Client
                               │

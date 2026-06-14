@@ -12,12 +12,14 @@ import (
 type AuthPrincipalResolver struct {
 	Client     *AuthClient
 	CookieName string
+	// ConnectorID selects which auth connector to resolve against (empty = default).
+	ConnectorID string
 }
 
 // Resolve implements authz.PrincipalResolver.
 func (r *AuthPrincipalResolver) Resolve(ctx context.Context, req *authz.Request) (*token.Principal, error) {
 	cookieVal := req.Cookies[r.CookieName]
-	resp, err := r.Client.Resolve(ctx, cookieVal)
+	resp, err := r.Client.ResolveConnector(ctx, cookieVal, r.ConnectorID)
 	if err != nil {
 		return nil, err
 	}

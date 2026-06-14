@@ -20,6 +20,91 @@
     "app_base_url": {
       "type": "string"
     },
+    "connectors": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "claim_mapping": {
+            "additionalProperties": false,
+            "properties": {
+              "authoritative_id_claim": {
+                "type": "string"
+              },
+              "email_claim": {
+                "type": "string"
+              },
+              "id_kind": {
+                "type": "string"
+              },
+              "name_claim": {
+                "type": "string"
+              },
+              "roles_claim": {
+                "type": "string"
+              }
+            },
+            "required": [],
+            "type": "object"
+          },
+          "cookie_name": {
+            "type": "string"
+          },
+          "default": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "oidc_audience": {
+            "type": "string"
+          },
+          "oidc_claims_source": {
+            "type": "string"
+          },
+          "oidc_client_id": {
+            "type": "string"
+          },
+          "oidc_client_secret": {
+            "type": "string"
+          },
+          "oidc_issuer": {
+            "type": "string"
+          },
+          "oidc_redirect_uri": {
+            "type": "string"
+          },
+          "oidc_scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "provider_plugin_id": {
+            "type": "string"
+          },
+          "session_pkce_ttl_seconds": {
+            "type": "integer"
+          },
+          "session_redis_prefix": {
+            "type": "string"
+          },
+          "session_refresh_lock_ttl_seconds": {
+            "type": "integer"
+          },
+          "session_ttl_seconds": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "oidc_issuer",
+          "oidc_redirect_uri",
+          "oidc_client_id"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
     "cookie_domain": {
       "type": "string"
     },

@@ -26,6 +26,11 @@ func loadConfig() (*config.Config, error) {
 }
 
 func buildProxyHandler(ctx context.Context, cfg *config.Config) (http.Handler, pkgproxy.Engine, func(context.Context) error, error) {
+	// Defensive: ensure at least the synthesized default route exists for callers that pass a
+	// config without going through config.Load (which normalizes).
+	if len(cfg.Routes) == 0 {
+		cfg.Normalize()
+	}
 	client := proxy.NewAuthClient(cfg.AuthURL, cfg.CookieName)
 
 	reg := plugin.New()
@@ -48,15 +53,34 @@ func buildProxyHandler(ctx context.Context, cfg *config.Config) (http.Handler, p
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("pipeline plugins: %w", err)
 	}
+	sharedPolicy := adaptPolicyEngine(policyEngine)
 
-	engine := &pkgproxy.DefaultEngine{
-		Resolver:        &proxy.AuthPrincipalResolver{Client: client, CookieName: cfg.CookieName},
-		Policy:          adaptPolicyEngine(policyEngine),
-		PipelinePlugins: pipelinePlugins,
-		UpstreamURL:     cfg.UpstreamURL,
-		RequireAuth:     bool(cfg.RequireAuth),
-		Metrics:         metrics,
-		Tracer:          tracer,
+	// Build one engine per configured route. Routes share the policy engine, pipeline plugins,
+	// metrics, and tracer; each gets its own connector-scoped resolver, upstream, and
+	// unauthenticated behavior.
+	routes := make([]httpserver.Route, 0, len(cfg.Routes))
+	var firstEngine pkgproxy.Engine
+	for i := range cfg.Routes {
+		rc := cfg.Routes[i]
+		engine := &pkgproxy.DefaultEngine{
+			Resolver: &proxy.AuthPrincipalResolver{
+				Client:      client,
+				CookieName:  connectorCookieName(cfg, rc.ConnectorID),
+				ConnectorID: rc.ConnectorID,
+			},
+			Policy:              sharedPolicy,
+			PipelinePlugins:     pipelinePlugins,
+			UpstreamURL:         rc.UpstreamURL,
+			RequireAuth:         bool(rc.RequireAuth),
+			UnauthenticatedMode: rc.UnauthenticatedMode,
+			LoginRedirectURL:    rc.LoginRedirectURL,
+			Metrics:             metrics,
+			Tracer:              tracer,
+		}
+		if firstEngine == nil {
+			firstEngine = engine
+		}
+		routes = append(routes, httpserver.Route{Config: rc, Engine: engine})
 	}
 
 	// Combine tracer and policy-hot-watcher shutdown into a single shutdown hook so
@@ -71,8 +95,19 @@ func buildProxyHandler(ctx context.Context, cfg *config.Config) (http.Handler, p
 		return nil
 	}
 
-	handler := httpserver.New(cfg, engine, reg, metricsHandler).Handler()
-	return handler, engine, shutdown, nil
+	srv := httpserver.NewWithRoutes(cfg, routes, reg, metricsHandler)
+	srv.SetMetrics(metrics)
+	handler := srv.Handler()
+	return handler, firstEngine, shutdown, nil
+}
+
+// connectorCookieName derives the proxy-side session cookie name for a connector, matching the
+// auth service's default naming: the legacy cookie for the default connector, else "<legacy>_<id>".
+func connectorCookieName(cfg *config.Config, connectorID string) string {
+	if connectorID == "" {
+		return cfg.CookieName
+	}
+	return cfg.CookieName + "_" + connectorID
 }
 
 // manifestLogger is used for non-fatal manifest discovery diagnostics. It is a package var

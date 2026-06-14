@@ -62,6 +62,83 @@ repos. The PolicyFront-era ecosystem repos (`policyfront/*`) are **archived /
 read-only** historical lineage — consume current ecosystem artifacts from their
 maintained homes, not the archived repos.
 
+## Collapsing split stacks: multi-connector auth & multi-route proxy
+
+As of ADR-0006, one `accessgate-auth` hosts multiple **connectors** and one
+`accessgate-proxy` serves multiple **routes**. This lets you collapse a split
+topology (e.g. `accessgate-auth` + `accessgate-auth-telegram` +
+`accessgate-proxy` + `accessgate-proxy-web`) into two processes. It is fully
+backward compatible: a config with no `connectors`/`routes` keeps working
+unchanged (a `default` connector/route is synthesized from the legacy
+`oidc_*` / `upstream_url` fields).
+
+### Translate the configs
+
+Auth — merge the two single-provider configs into one `connectors` list:
+
+```json
+{
+  "redis_url": "redis://redis:6379",
+  "cookie_signing_secret": "…",
+  "app_base_url": "https://portal.example.com",
+  "connectors": [
+    { "id": "sso", "default": true,
+      "oidc_issuer": "https://idp.example.com",
+      "oidc_client_id": "portal", "oidc_client_secret": "…",
+      "oidc_redirect_uri": "https://portal.example.com/callback/sso" },
+    { "id": "telegram",
+      "oidc_issuer": "https://tg-oidc.example.com",
+      "oidc_client_id": "tg", "oidc_client_secret": "…",
+      "oidc_redirect_uri": "https://portal.example.com/callback/telegram",
+      "session_redis_prefix": "telegram",
+      "claim_mapping": { "authoritative_id_claim": "tg_id", "id_kind": "telegram_id" } }
+  ]
+}
+```
+
+Set the Telegram connector's `session_redis_prefix` to the **old prefix used by
+the `accessgate-auth-telegram` deployment** so its existing sessions survive the
+move (no Redis flush). The `default` connector keeps the legacy cookie name, so
+primary SSO users are not logged out.
+
+Proxy — turn the two upstreams into `routes`:
+
+```json
+{
+  "auth_url": "http://accessgate-auth:8080",
+  "routes": [
+    { "id": "web", "path_prefix": "/", "upstream_url": "http://web:3000",
+      "require_auth": true, "unauthenticated_mode": "html_redirect",
+      "login_redirect_url": "https://portal.example.com/login", "connector_id": "sso" },
+    { "id": "api", "path_prefix": "/graphql", "upstream_url": "http://api:4000",
+      "require_auth": true, "unauthenticated_mode": "api_401", "connector_id": "sso" }
+  ]
+}
+```
+
+The proxy derives a connector's cookie name as `<cookie_name>_<connector_id>`
+(the default connector uses the bare `cookie_name`), matching the auth side.
+
+### Rollout order (no hard reset)
+
+1. Ship the new binaries to all four deployments with **unchanged** config and
+   verify parity (the synthesized default connector/route reproduces today's
+   behavior). Reversible.
+2. Deploy the unified auth with `connectors`, alongside the old auth
+   deployments, and shift traffic gradually — sessions survive via preserved
+   prefixes/cookies.
+3. Deploy the unified proxy with `routes`, alongside the old proxies, until
+   verified.
+4. Decommission `accessgate-auth-telegram` and `accessgate-proxy-web`.
+
+### Connector handoff
+
+For flows that authenticate on one connector and need to hand a browser into the
+web session (e.g. a Telegram bot → web), use the signed one-time handoff ticket:
+`POST /internal/handoff/issue` (admin) returns a `redeem_url`; the browser visits
+`GET /handoff/redeem/{connector}?ticket=…` which sets the connector cookie and
+redirects. Tickets are short-lived, HMAC-signed, and redeemable once.
+
 ## Repository pointers
 
 - Canonical core: **`accessgate/accessgate`**

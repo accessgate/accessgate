@@ -107,6 +107,50 @@
     "require_auth": {
       "type": "boolean"
     },
+    "routes": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "connector_id": {
+            "type": "string"
+          },
+          "hosts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "login_redirect_url": {
+            "type": "string"
+          },
+          "path_prefix": {
+            "type": "string"
+          },
+          "policy_bundle_path": {
+            "type": "string"
+          },
+          "require_auth": {
+            "type": "boolean"
+          },
+          "unauthenticated_mode": {
+            "type": "string"
+          },
+          "upstream_url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "path_prefix",
+          "upstream_url"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
     "upstream_url": {
       "type": "string"
     }

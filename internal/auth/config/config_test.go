@@ -39,6 +39,96 @@ func TestKeyLayout(t *testing.T) {
 	}
 }
 
+func TestNormalize_LegacySynthesizesDefaultConnector(t *testing.T) {
+	cfg := &Config{
+		OIDCIssuer:       "https://idp.example.com",
+		OIDCRedirectURI:  "https://app/callback",
+		OIDCClientID:     "client",
+		OIDCClientSecret: "secret",
+		ProviderPluginID: "provider:oidc",
+	}
+	cfg.ApplyDefaults()
+	cfg.Normalize()
+
+	if len(cfg.Connectors) != 1 {
+		t.Fatalf("expected 1 synthesized connector, got %d", len(cfg.Connectors))
+	}
+	c := cfg.Connectors[0]
+	if c.ID != "default" || !bool(c.Default) {
+		t.Errorf("synthesized connector should be id=default,default=true; got id=%q default=%v", c.ID, bool(c.Default))
+	}
+	if c.OIDCIssuer != "https://idp.example.com" || c.OIDCClientID != "client" {
+		t.Errorf("synthesized connector did not copy legacy OIDC fields: %+v", c)
+	}
+	// Backward compat: prefixes and cookie must match the legacy single-provider layout.
+	if got := c.KeyLayout().SessionPrefix; got != "auth:session:" {
+		t.Errorf("default connector SessionPrefix = %q, want auth:session: (backward compat)", got)
+	}
+	if c.CookieName != "__Host-ess_session" {
+		t.Errorf("default connector CookieName = %q, want __Host-ess_session", c.CookieName)
+	}
+	if c.ClaimMapping.AuthoritativeIDClaim != "sub" || c.ClaimMapping.IDKind != "oidc_sub" {
+		t.Errorf("default claim mapping = %+v, want sub/oidc_sub", c.ClaimMapping)
+	}
+}
+
+func TestNormalize_MultiConnectorDefaults(t *testing.T) {
+	cfg := &Config{
+		RedisURL:            "redis://localhost",
+		CookieSigningSecret: "secret",
+		AppBaseURL:          "https://app.example.com",
+		Connectors: []ConnectorConfig{
+			{ID: "sso", Default: true, OIDCIssuer: "https://sso", OIDCRedirectURI: "https://app/cb/sso", OIDCClientID: "a"},
+			{ID: "telegram", OIDCIssuer: "https://tg", OIDCRedirectURI: "https://app/cb/tg", OIDCClientID: "b",
+				ClaimMapping: ClaimMappingConfig{AuthoritativeIDClaim: "tg_id", IDKind: "telegram_id"}},
+		},
+	}
+	cfg.ApplyDefaults()
+	cfg.Normalize()
+
+	tg := cfg.Connectors[1]
+	if got := tg.KeyLayout().SessionPrefix; got != "auth:telegram:session:" {
+		t.Errorf("telegram SessionPrefix = %q, want auth:telegram:session:", got)
+	}
+	if tg.CookieName != "__Host-ess_session_telegram" {
+		t.Errorf("telegram CookieName = %q, want __Host-ess_session_telegram", tg.CookieName)
+	}
+	if tg.ClaimMapping.AuthoritativeIDClaim != "tg_id" || tg.ClaimMapping.IDKind != "telegram_id" {
+		t.Errorf("telegram claim mapping = %+v, want tg_id/telegram_id", tg.ClaimMapping)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate multi-connector: %v", err)
+	}
+}
+
+func TestValidateConnectors_Errors(t *testing.T) {
+	base := func(conns []ConnectorConfig) *Config {
+		c := &Config{RedisURL: "redis://x", CookieSigningSecret: "s", AppBaseURL: "https://app", Connectors: conns}
+		c.ApplyDefaults()
+		c.Normalize()
+		return c
+	}
+	cases := map[string][]ConnectorConfig{
+		"bad id":         {{ID: "bad id", Default: true, OIDCIssuer: "i", OIDCRedirectURI: "r", OIDCClientID: "c"}},
+		"missing issuer": {{ID: "x", Default: true, OIDCRedirectURI: "r", OIDCClientID: "c"}},
+		"duplicate id": {
+			{ID: "x", Default: true, OIDCIssuer: "i", OIDCRedirectURI: "r", OIDCClientID: "c"},
+			{ID: "x", OIDCIssuer: "i", OIDCRedirectURI: "r", OIDCClientID: "c"},
+		},
+		"two defaults": {
+			{ID: "x", Default: true, OIDCIssuer: "i", OIDCRedirectURI: "r", OIDCClientID: "c"},
+			{ID: "y", Default: true, OIDCIssuer: "i", OIDCRedirectURI: "r", OIDCClientID: "c"},
+		},
+	}
+	for name, conns := range cases {
+		t.Run(name, func(t *testing.T) {
+			if err := base(conns).Validate(); err == nil {
+				t.Errorf("expected validation error for %q", name)
+			}
+		})
+	}
+}
+
 func TestLoadFromEnv(t *testing.T) {
 	if err := os.Setenv("OIDC_ISSUER", "https://idp.example.com"); err != nil {
 		t.Fatalf("Setenv OIDC_ISSUER: %v", err)

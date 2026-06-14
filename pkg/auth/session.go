@@ -4,6 +4,8 @@ package auth
 type SessionRequest struct {
 	// SessionCookie is the raw session cookie value from the request.
 	SessionCookie string
+	// Connector selects the identity connector (empty = default connector).
+	Connector string
 }
 
 // SessionResponse holds the session endpoint response (JSON: is_authenticated, user).

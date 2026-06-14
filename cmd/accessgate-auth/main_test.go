@@ -17,10 +17,11 @@ func TestBuildProviderPluginDefaultOIDC(t *testing.T) {
 		HTTPPort:            "8080",
 	}
 	cfg.ApplyDefaults()
+	cfg.Normalize()
 	if err := cfg.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	p, err := buildProviderPlugin(cfg)
+	p, err := buildProviderPlugin(*cfg.DefaultConnector())
 	if err != nil || p == nil {
 		t.Fatalf("%v %v", p, err)
 	}

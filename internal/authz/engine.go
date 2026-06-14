@@ -41,8 +41,13 @@ type DefaultEngine struct {
 	UpstreamURL     string
 	RequireAuth     bool
 	HeaderBuilder   HeaderBuilder
-	Metrics         observability.Metrics // optional; records auth decisions
-	Tracer          observability.Tracer  // optional; records best-effort spans
+	// UnauthenticatedMode controls the unauthenticated response: "" / "api_401" returns a JSON
+	// 401 (default); "html_redirect" returns a denied response with RedirectTo set to
+	// LoginRedirectURL so the HTTP layer issues a 302.
+	UnauthenticatedMode string
+	LoginRedirectURL    string
+	Metrics             observability.Metrics // optional; records auth decisions
+	Tracer              observability.Tracer  // optional; records best-effort spans
 }
 
 // Handle implements Engine.Handle.
@@ -66,6 +71,16 @@ func (e *DefaultEngine) Handle(ctx context.Context, req *Request) (*Response, er
 		}, nil
 	}
 	if principal == nil && e.RequireAuth {
+		if e.UnauthenticatedMode == "html_redirect" && e.LoginRedirectURL != "" {
+			if e.Metrics != nil {
+				e.Metrics.AuthDecision(false, http.StatusFound)
+			}
+			return &Response{
+				Allow:      false,
+				StatusCode: http.StatusFound,
+				RedirectTo: e.LoginRedirectURL,
+			}, nil
+		}
 		return &Response{
 			Allow:      false,
 			StatusCode: http.StatusUnauthorized,

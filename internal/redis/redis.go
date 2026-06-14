@@ -361,6 +361,13 @@ func (s *Store) RecordReplay(ctx context.Context, key string, ttl time.Duration)
 	return s.client.Set(ctx, k, "1", ttl).Err()
 }
 
+// ConsumeOnce atomically records key in the replay namespace, returning firstUse=true only
+// for the first caller within ttl (Redis SETNX). Used for one-time handoff ticket redemption.
+func (s *Store) ConsumeOnce(ctx context.Context, key string, ttl time.Duration) (firstUse bool, err error) {
+	k := s.layout.ReplayKey(key)
+	return s.client.SetNX(ctx, k, "1", ttl).Result()
+}
+
 // CheckReplay returns true if the key was already seen (replay), and false if not yet seen.
 // Does not record the key; use RecordReplay after validating to record.
 func (s *Store) CheckReplay(ctx context.Context, key string) (alreadySeen bool, err error) {

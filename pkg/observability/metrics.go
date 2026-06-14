@@ -26,6 +26,22 @@ type Metrics interface {
 	LogoutCompleted()
 }
 
+// ConnectorMetrics is an optional, additive extension implemented by PrometheusMetrics for the
+// multi-connector / multi-route counters. It is kept separate from the frozen Metrics interface
+// (v1 stability contract) so callers type-assert for it rather than requiring every Metrics
+// implementation to provide these methods.
+type ConnectorMetrics interface {
+	// ConnectorCallback records an OIDC callback (login completion) outcome per connector.
+	ConnectorCallback(connectorID string, success bool)
+	// HandoffIssued records a handoff ticket issuance outcome per connector.
+	HandoffIssued(connectorID string, success bool)
+	// HandoffRedeemed records a handoff ticket redemption outcome per connector.
+	HandoffRedeemed(connectorID string, success bool)
+	// ProxyRouteOutcome records the outcome of a proxy request per route. outcome is one of
+	// "allow", "auth_failure", "upstream_failure", or "route_miss".
+	ProxyRouteOutcome(route, outcome string)
+}
+
 // NopMetrics discards all metrics. It is intended public surface: a no-op Metrics
 // implementation that external integrators (and tests) can use as a default sink.
 type NopMetrics struct{}
@@ -56,3 +72,18 @@ func (NopMetrics) RefreshCompleted(success bool) {}
 
 // LogoutCompleted implements Metrics.
 func (NopMetrics) LogoutCompleted() {}
+
+// NopMetrics also satisfies ConnectorMetrics so it can be used as a no-op sink for the
+// multi-connector / multi-route counters.
+
+// ConnectorCallback implements ConnectorMetrics.
+func (NopMetrics) ConnectorCallback(connectorID string, success bool) {}
+
+// HandoffIssued implements ConnectorMetrics.
+func (NopMetrics) HandoffIssued(connectorID string, success bool) {}
+
+// HandoffRedeemed implements ConnectorMetrics.
+func (NopMetrics) HandoffRedeemed(connectorID string, success bool) {}
+
+// ProxyRouteOutcome implements ConnectorMetrics.
+func (NopMetrics) ProxyRouteOutcome(route, outcome string) {}
