@@ -333,7 +333,7 @@ jobs:
       # pushed image manifests so consumers can verify with `gh attestation
       # verify` / `cosign verify-attestation`.
       - name: Attest build provenance for release binaries
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: "dist/**/accessgate-*"
 
@@ -366,7 +366,7 @@ jobs:
           echo "dh_proxy_digest=${dh_proxy_digest}" >> "$GITHUB_OUTPUT"
 
       - name: Attest build provenance for accessgate-auth image
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-name: ghcr.io/accessgate/accessgate-auth
           subject-digest: ${{ steps.image_digests.outputs.auth_digest }}
@@ -374,7 +374,7 @@ jobs:
         if: ${{ steps.image_digests.outputs.auth_digest != '' }}
 
       - name: Attest build provenance for accessgate-proxy image
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-name: ghcr.io/accessgate/accessgate-proxy
           subject-digest: ${{ steps.image_digests.outputs.proxy_digest }}
@@ -385,7 +385,7 @@ jobs:
       # in the registry they were pushed to, so the GHCR attestation alone would
       # not serve `gh attestation verify oci://docker.io/...` lookups.
       - name: Attest build provenance for accessgate-auth image (Docker Hub)
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-name: docker.io/accessgate/accessgate-auth
           subject-digest: ${{ steps.image_digests.outputs.dh_auth_digest }}
@@ -393,7 +393,7 @@ jobs:
         if: ${{ steps.image_digests.outputs.dh_auth_digest != '' }}
 
       - name: Attest build provenance for accessgate-proxy image (Docker Hub)
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-name: docker.io/accessgate/accessgate-proxy
           subject-digest: ${{ steps.image_digests.outputs.dh_proxy_digest }}
