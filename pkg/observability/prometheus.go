@@ -15,6 +15,9 @@ type PrometheusMetrics struct {
 	sessionStoreOps *prometheus.CounterVec
 	pluginHealth    *prometheus.GaugeVec
 	agentFlowOps    *prometheus.CounterVec
+	callbacks       *prometheus.CounterVec
+	handoff         *prometheus.CounterVec
+	routeOutcomes   *prometheus.CounterVec
 }
 
 // NewPrometheusMetrics registers and returns Prometheus metrics for AccessGate.
@@ -46,13 +49,28 @@ func NewPrometheusMetrics(reg *prometheus.Registry) (*PrometheusMetrics, http.Ha
 		prometheus.CounterOpts{Name: "accessgate_agent_flow_operations_total", Help: "Agent login/refresh/logout flow outcomes by operation and result."},
 		[]string{"operation", "result"},
 	)
-	reg.MustRegister(authDecisions, jwksCache, sessionStoreOps, pluginHealth, agentFlowOps)
+	callbacks := prometheus.NewCounterVec(
+		prometheus.CounterOpts{Name: "accessgate_auth_callbacks_total", Help: "OIDC callback (login completion) outcomes by connector and result."},
+		[]string{"connector_id", "result"},
+	)
+	handoff := prometheus.NewCounterVec(
+		prometheus.CounterOpts{Name: "accessgate_auth_handoff_total", Help: "Handoff ticket issue/redeem outcomes by operation, connector, and result."},
+		[]string{"operation", "connector_id", "result"},
+	)
+	routeOutcomes := prometheus.NewCounterVec(
+		prometheus.CounterOpts{Name: "accessgate_proxy_route_outcomes_total", Help: "Proxy request outcomes by route and outcome (allow/auth_failure/upstream_failure/route_miss)."},
+		[]string{"route", "outcome"},
+	)
+	reg.MustRegister(authDecisions, jwksCache, sessionStoreOps, pluginHealth, agentFlowOps, callbacks, handoff, routeOutcomes)
 	m := &PrometheusMetrics{
 		authDecisions:   authDecisions,
 		jwksCache:       jwksCache,
 		sessionStoreOps: sessionStoreOps,
 		pluginHealth:    pluginHealth,
 		agentFlowOps:    agentFlowOps,
+		callbacks:       callbacks,
+		handoff:         handoff,
+		routeOutcomes:   routeOutcomes,
 	}
 	handler := promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
 	return m, handler
@@ -130,4 +148,31 @@ func (p *PrometheusMetrics) RefreshCompleted(success bool) {
 // LogoutCompleted implements Metrics.
 func (p *PrometheusMetrics) LogoutCompleted() {
 	p.agentFlowOps.WithLabelValues("logout", "ok").Inc()
+}
+
+func okFail(success bool) string {
+	if success {
+		return "ok"
+	}
+	return "fail"
+}
+
+// ConnectorCallback implements Metrics.
+func (p *PrometheusMetrics) ConnectorCallback(connectorID string, success bool) {
+	p.callbacks.WithLabelValues(connectorID, okFail(success)).Inc()
+}
+
+// HandoffIssued implements Metrics.
+func (p *PrometheusMetrics) HandoffIssued(connectorID string, success bool) {
+	p.handoff.WithLabelValues("issue", connectorID, okFail(success)).Inc()
+}
+
+// HandoffRedeemed implements Metrics.
+func (p *PrometheusMetrics) HandoffRedeemed(connectorID string, success bool) {
+	p.handoff.WithLabelValues("redeem", connectorID, okFail(success)).Inc()
+}
+
+// ProxyRouteOutcome implements Metrics.
+func (p *PrometheusMetrics) ProxyRouteOutcome(route, outcome string) {
+	p.routeOutcomes.WithLabelValues(route, outcome).Inc()
 }

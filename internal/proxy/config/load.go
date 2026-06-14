@@ -14,6 +14,7 @@ func Load(ctx context.Context, configPath string) (*Config, error) {
 		return nil, err
 	}
 	cfg.ApplyDefaults()
+	cfg.Normalize()
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}

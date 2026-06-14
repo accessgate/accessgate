@@ -37,6 +37,46 @@ func (b *FlexibleBool) UnmarshalJSON(data []byte) error {
 	return fmt.Errorf("flexible bool: unsupported value %s", string(data))
 }
 
+// CommaStrings is a []string that unmarshals from a JSON string (comma-separated) or a JSON array.
+// Used for env vars and YAML/JSON arrays (e.g. per-route host lists).
+type CommaStrings []string
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (c *CommaStrings) UnmarshalJSON(data []byte) error {
+	if len(data) == 0 {
+		*c = nil
+		return nil
+	}
+	if data[0] == '"' {
+		var s string
+		if err := json.Unmarshal(data, &s); err != nil {
+			return err
+		}
+		out := make([]string, 0)
+		for p := range strings.SplitSeq(s, ",") {
+			if t := strings.TrimSpace(p); t != "" {
+				out = append(out, t)
+			}
+		}
+		*c = out
+		return nil
+	}
+	var slice []string
+	if err := json.Unmarshal(data, &slice); err != nil {
+		return err
+	}
+	*c = slice
+	return nil
+}
+
+// Unauthenticated-handling modes for a route.
+const (
+	// UnauthModeAPI401 returns a JSON 401 when no principal is present (default, API style).
+	UnauthModeAPI401 = "api_401"
+	// UnauthModeHTMLRedirect issues a 302 to LoginRedirectURL when no principal is present (browser style).
+	UnauthModeHTMLRedirect = "html_redirect"
+)
+
 type PolicyEngine string
 
 const (
@@ -136,6 +176,11 @@ type Config struct {
 	// intentionally runs on a loopback or private address. Never enable in production.
 	AllowPrivateUpstreams bool `json:"allow_private_upstreams"`
 
+	// Routes lists the protected routes served by this proxy instance. When empty,
+	// Normalize() synthesizes a single "default" route from the legacy top-level
+	// UpstreamURL/ProxyPathPrefix/RequireAuth fields (backward compat).
+	Routes []RouteConfig `json:"routes"`
+
 	// Header claim mapping
 	HeaderUserIDClaim            string `json:"headers_user_id_claim"`
 	HeaderEmailClaim             string `json:"headers_email_claim"`
@@ -145,6 +190,31 @@ type Config struct {
 	HeaderGroupsClaim            string `json:"headers_groups_claim"`
 	HeaderTenantIDClaim          string `json:"headers_tenant_id_claim"`
 	HeaderAdminRole              string `json:"headers_admin_role"`
+}
+
+// RouteConfig describes a single protected route served by this proxy instance.
+// Each route selects its own upstream, auth policy, unauthenticated behavior, and the
+// auth connector its sessions resolve against.
+type RouteConfig struct {
+	// ID is a stable identifier used as a metrics label and in admin output.
+	ID string `json:"id"`
+	// Hosts optionally restricts the route to specific request hosts (exact match). Empty = any host.
+	Hosts CommaStrings `json:"hosts"`
+	// PathPrefix is the URL path prefix this route serves (e.g. "/graphql", "/api"). Required.
+	PathPrefix string `json:"path_prefix"`
+	// UpstreamURL is the backend this route forwards authorized requests to. Required.
+	UpstreamURL string `json:"upstream_url"`
+	// RequireAuth enforces a resolved principal before the request is allowed through.
+	RequireAuth FlexibleBool `json:"require_auth"`
+	// UnauthenticatedMode controls the response when no principal is present:
+	// UnauthModeAPI401 (default) or UnauthModeHTMLRedirect.
+	UnauthenticatedMode string `json:"unauthenticated_mode"`
+	// LoginRedirectURL is the location for html_redirect mode. Required when that mode is set.
+	LoginRedirectURL string `json:"login_redirect_url"`
+	// ConnectorID names the auth connector this route's sessions resolve against. Empty = default.
+	ConnectorID string `json:"connector_id"`
+	// PolicyBundlePath optionally overrides the policy bundle for this route. Empty = shared engine.
+	PolicyBundlePath string `json:"policy_bundle_path"`
 }
 
 // blockedUpstreamCIDRs lists private/loopback/link-local ranges forbidden as upstream targets (SSRF).
@@ -242,10 +312,11 @@ func validateGRPCUpstreamSSRF(addr string) error {
 }
 
 // Validate returns an error if required configuration is missing.
+//
+// When Routes is empty it validates the legacy single-upstream top-level fields (so existing
+// configs and callers that invoke Validate() without Normalize() keep working). When Routes is
+// non-empty it validates each route and the top-level UpstreamURL becomes optional.
 func (c *Config) Validate() error {
-	if c.UpstreamURL == "" {
-		return errMissing("UPSTREAM_URL")
-	}
 	if c.AuthURL == "" {
 		return errMissing("AUTH_URL")
 	}
@@ -267,17 +338,87 @@ func (c *Config) Validate() error {
 	if !strings.HasPrefix(c.ProxyPathPrefix, "/") {
 		c.ProxyPathPrefix = "/" + c.ProxyPathPrefix
 	}
-	if !c.AllowPrivateUpstreams {
-		if err := validateUpstreamSSRF(c.UpstreamURL); err != nil {
+	if c.GRPCUpstreamAddr != "" && !c.AllowPrivateUpstreams {
+		if err := validateGRPCUpstreamSSRF(c.GRPCUpstreamAddr); err != nil {
 			return err
 		}
-		if c.GRPCUpstreamAddr != "" {
-			if err := validateGRPCUpstreamSSRF(c.GRPCUpstreamAddr); err != nil {
+	}
+
+	if len(c.Routes) == 0 {
+		// Legacy single-upstream mode.
+		if c.UpstreamURL == "" {
+			return errMissing("UPSTREAM_URL")
+		}
+		if !c.AllowPrivateUpstreams {
+			if err := validateUpstreamSSRF(c.UpstreamURL); err != nil {
 				return err
+			}
+		}
+		return nil
+	}
+	return c.validateRoutes()
+}
+
+// validateRoutes validates the multi-route configuration. It assumes Normalize() has
+// already filled per-route defaults.
+func (c *Config) validateRoutes() error {
+	seen := make(map[string]bool, len(c.Routes))
+	for i := range c.Routes {
+		rt := &c.Routes[i]
+		if rt.ID == "" {
+			return fmt.Errorf("config: route[%d] missing id", i)
+		}
+		if seen[rt.ID] {
+			return fmt.Errorf("config: duplicate route id %q", rt.ID)
+		}
+		seen[rt.ID] = true
+		if rt.PathPrefix == "" {
+			return fmt.Errorf("config: route %q missing path_prefix", rt.ID)
+		}
+		if rt.UpstreamURL == "" {
+			return fmt.Errorf("config: route %q missing upstream_url", rt.ID)
+		}
+		switch rt.UnauthenticatedMode {
+		case UnauthModeAPI401, UnauthModeHTMLRedirect:
+		default:
+			return fmt.Errorf("config: route %q invalid unauthenticated_mode %q (must be %q or %q)", rt.ID, rt.UnauthenticatedMode, UnauthModeAPI401, UnauthModeHTMLRedirect)
+		}
+		if rt.UnauthenticatedMode == UnauthModeHTMLRedirect && rt.LoginRedirectURL == "" {
+			return fmt.Errorf("config: route %q with unauthenticated_mode=html_redirect requires login_redirect_url", rt.ID)
+		}
+		if !c.AllowPrivateUpstreams {
+			if err := validateUpstreamSSRF(rt.UpstreamURL); err != nil {
+				return fmt.Errorf("config: route %q: %w", rt.ID, err)
 			}
 		}
 	}
 	return nil
+}
+
+// Normalize synthesizes and fills defaults for the route list. When no routes are configured
+// it creates a single "default" route from the legacy top-level fields, preserving the existing
+// path prefix and upstream. It is idempotent and should be called after ApplyDefaults() and
+// before Validate() (Load does this). Direct callers of Validate() that skip Normalize() get
+// legacy single-upstream validation.
+func (c *Config) Normalize() {
+	if len(c.Routes) == 0 {
+		c.Routes = []RouteConfig{{
+			ID:                  "default",
+			PathPrefix:          c.ProxyPathPrefix,
+			UpstreamURL:         c.UpstreamURL,
+			RequireAuth:         c.RequireAuth,
+			UnauthenticatedMode: UnauthModeAPI401,
+		}}
+	}
+	for i := range c.Routes {
+		rt := &c.Routes[i]
+		if rt.PathPrefix != "" && !strings.HasPrefix(rt.PathPrefix, "/") {
+			rt.PathPrefix = "/" + rt.PathPrefix
+		}
+		if rt.UnauthenticatedMode == "" {
+			rt.UnauthenticatedMode = UnauthModeAPI401
+		}
+	}
 }
 
 // ApplyDefaults sets default values for optional fields when not set.

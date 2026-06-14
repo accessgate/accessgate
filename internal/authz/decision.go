@@ -9,4 +9,7 @@ type Response struct {
 	SetCookies      []cookie.OutCookie
 	StatusCode      int
 	Body            []byte
+	// RedirectTo, when non-empty on a denied response, instructs the HTTP layer to issue a
+	// 302 redirect (browser/html_redirect mode) instead of writing the status/body.
+	RedirectTo string
 }

@@ -3,6 +3,8 @@ package auth
 // LogoutRequest holds session and redirect target for logout.
 type LogoutRequest struct {
 	SessionCookie string
+	// Connector selects the identity connector (empty = default connector).
+	Connector string
 	// RedirectTo is the post-logout redirect URI (validated).
 	RedirectTo string
 	// Origin/Referer for CSRF check on POST.

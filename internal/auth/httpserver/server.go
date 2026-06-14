@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -67,19 +68,33 @@ func (s *Server) routes() {
 		s.mux.HandleFunc("POST /internal/session", s.handlePatchSession)
 		s.mux.HandleFunc("POST /internal/session/revoke", s.handleRevokeSession)
 		s.mux.HandleFunc("POST /internal/token-handoff/user", s.handleTokenHandoffUser)
+		s.mux.HandleFunc("POST /internal/handoff/issue", s.handleHandoffIssue)
 	}
 	if s.metricsHandler != nil {
 		s.mux.Handle("GET /metrics", s.metricsHandler)
 	}
+	// Both legacy (default connector) and connector-scoped path variants are registered.
+	// Connector selection is via the {connector} path segment (empty = default connector).
 	s.mux.HandleFunc("GET /login", s.handleLogin)
+	s.mux.HandleFunc("GET /login/{connector}", s.handleLogin)
 	s.mux.HandleFunc("GET /callback", s.handleCallback)
 	s.mux.HandleFunc("POST /callback", s.handleCallback)
+	s.mux.HandleFunc("GET /callback/{connector}", s.handleCallback)
+	s.mux.HandleFunc("POST /callback/{connector}", s.handleCallback)
 	s.mux.HandleFunc("GET /session", s.handleSession)
+	s.mux.HandleFunc("GET /session/{connector}", s.handleSession)
 	s.mux.HandleFunc("GET /me", s.handleMe)
+	s.mux.HandleFunc("GET /me/{connector}", s.handleMe)
 	s.mux.HandleFunc("GET /logout", s.handleLogout)
 	s.mux.HandleFunc("POST /logout", s.handleLogout)
+	s.mux.HandleFunc("GET /logout/{connector}", s.handleLogout)
+	s.mux.HandleFunc("POST /logout/{connector}", s.handleLogout)
 	s.mux.HandleFunc("GET /refresh", s.handleRefresh)
+	s.mux.HandleFunc("GET /refresh/{connector}", s.handleRefresh)
 	s.mux.HandleFunc("GET /internal/resolve", s.handleResolve)
+	// Handoff redemption is public (the signed one-time ticket is the credential).
+	s.mux.HandleFunc("GET /handoff/redeem", s.handleHandoffRedeem)
+	s.mux.HandleFunc("GET /handoff/redeem/{connector}", s.handleHandoffRedeem)
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
@@ -125,6 +140,18 @@ func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) authConfigSummary() map[string]any {
+	connectors := make([]map[string]any, 0, len(s.cfg.Connectors))
+	for i := range s.cfg.Connectors {
+		cc := s.cfg.Connectors[i]
+		connectors = append(connectors, map[string]any{
+			"id":                cc.ID,
+			"default":           bool(cc.Default),
+			"oidc_issuer":       cc.OIDCIssuer,
+			"oidc_redirect_uri": cc.OIDCRedirectURI,
+			"cookie_name":       cc.CookieName,
+			"id_kind":           cc.ClaimMapping.IDKind,
+		})
+	}
 	return map[string]any{
 		"oidc_issuer":       s.cfg.OIDCIssuer,
 		"oidc_redirect_uri": s.cfg.OIDCRedirectURI,
@@ -132,6 +159,7 @@ func (s *Server) authConfigSummary() map[string]any {
 		"http_port":         s.cfg.HTTPPort,
 		"redis_url_set":     s.cfg.RedisURL != "",
 		"app_base_url":      s.cfg.AppBaseURL,
+		"connectors":        connectors,
 	}
 }
 
@@ -186,18 +214,65 @@ func cors(origins []string) func(http.Handler) http.Handler {
 	}
 }
 
-func (s *Server) getCookie(r *http.Request) string {
-	c, _ := r.Cookie(s.cookie)
+func (s *Server) getCookieFor(r *http.Request, name string) string {
+	c, _ := r.Cookie(name)
 	if c != nil {
 		return c.Value
 	}
 	return ""
 }
 
+// connectorCookie returns the session cookie name and max-age for the given connector id
+// (empty = default). Falls back to the legacy single cookie when config has no connectors.
+func (s *Server) connectorCookie(connID string) (name string, maxAge int) {
+	name = s.cookie
+	maxAge = s.cfg.SessionTTLSeconds
+	if cc := s.cfg.ConnectorByID(connID); cc != nil {
+		if cc.CookieName != "" {
+			name = cc.CookieName
+		}
+		if cc.SessionTTLSeconds != 0 {
+			maxAge = cc.SessionTTLSeconds
+		}
+	}
+	return name, maxAge
+}
+
+// cookieOptsForName derives cookie options for a specific cookie name and max-age, applying
+// the same __Host- hardening and SameSite mapping as the legacy cookieOpts.
+func (s *Server) cookieOptsForName(name string, maxAge int) (path, domain string, ma int, secure, httpOnly bool, sameSite string) {
+	path = "/"
+	domain = s.cfg.CookieDomain
+	ma = maxAge
+	secure = bool(s.cfg.CookieSecure)
+	if strings.HasPrefix(name, "__Host-") {
+		secure = true
+		domain = ""
+	}
+	httpOnly = true
+	sameSite = "Lax"
+	switch s.cfg.CookieSameSite {
+	case http.SameSiteStrictMode:
+		sameSite = "Strict"
+	case http.SameSiteNoneMode:
+		sameSite = "None"
+	}
+	return path, domain, ma, secure, httpOnly, sameSite
+}
+
+// clearCookie writes a cookie-clearing Set-Cookie header for the given name.
+func (s *Server) clearCookie(w http.ResponseWriter, name string) {
+	w.Header().Add("Set-Cookie", name+"=; Path=/; Max-Age=0; HttpOnly")
+	if bool(s.cfg.CookieSecure) || strings.HasPrefix(name, "__Host-") {
+		w.Header().Add("Set-Cookie", name+"=; Path=/; Max-Age=0; HttpOnly; Secure")
+	}
+}
+
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	connID := r.PathValue("connector")
 	redirectTo := r.URL.Query().Get("redirect_to")
 	prompt := strings.TrimSpace(r.URL.Query().Get("prompt"))
-	resp, err := s.svc.LoginStart(r.Context(), auth.LoginStartRequest{RedirectTo: redirectTo, Prompt: prompt})
+	resp, err := s.svc.LoginStart(r.Context(), auth.LoginStartRequest{Connector: connID, RedirectTo: redirectTo, Prompt: prompt})
 	if err != nil {
 		http.Error(w, err.Error(), errormap.StatusFor(err))
 		return
@@ -206,7 +281,9 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
+	connID := r.PathValue("connector")
 	req := auth.LoginEndRequest{
+		Connector:        connID,
 		Code:             r.URL.Query().Get("code"),
 		State:            r.URL.Query().Get("state"),
 		Error:            r.URL.Query().Get("error"),
@@ -224,38 +301,15 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), errormap.StatusFor(err))
 		return
 	}
+	name, maxAge := s.connectorCookie(connID)
 	if resp.ClearCookie {
-		// Clear cookie by setting MaxAge=-1 (handled by cookie manager in response)
-		w.Header().Set("Set-Cookie", s.cookie+"=; Path=/; Max-Age=0; HttpOnly")
-		if bool(s.cfg.CookieSecure) {
-			w.Header().Add("Set-Cookie", s.cookie+"=; Path=/; Max-Age=0; HttpOnly; Secure")
-		}
+		s.clearCookie(w, name)
 	}
 	if resp.SetCookieValue != "" {
-		path, domain, maxAge, secure, httpOnly, sameSite := s.cookieOpts()
-		writeSessionCookie(w, s.cookie, resp.SetCookieValue, path, domain, maxAge, secure, httpOnly, sameSite)
+		path, domain, ma, secure, httpOnly, sameSite := s.cookieOptsForName(name, maxAge)
+		writeSessionCookie(w, name, resp.SetCookieValue, path, domain, ma, secure, httpOnly, sameSite)
 	}
 	http.Redirect(w, r, resp.RedirectURL, http.StatusFound)
-}
-
-func (s *Server) cookieOpts() (path, domain string, maxAge int, secure, httpOnly bool, sameSite string) {
-	path = "/"
-	domain = s.cfg.CookieDomain
-	maxAge = s.cfg.SessionTTLSeconds
-	secure = bool(s.cfg.CookieSecure)
-	if strings.HasPrefix(s.cookie, "__Host-") {
-		secure = true
-		domain = ""
-	}
-	httpOnly = true
-	sameSite = "Lax"
-	switch s.cfg.CookieSameSite {
-	case http.SameSiteStrictMode:
-		sameSite = "Strict"
-	case http.SameSiteNoneMode:
-		sameSite = "None"
-	}
-	return path, domain, maxAge, secure, httpOnly, sameSite
 }
 
 func writeSessionCookie(w http.ResponseWriter, name, value, path, domain string, maxAge int, secure, httpOnly bool, sameSite string) {
@@ -271,14 +325,16 @@ func writeSessionCookie(w http.ResponseWriter, name, value, path, domain string,
 }
 
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
-	resp, err := s.svc.Session(r.Context(), auth.SessionRequest{SessionCookie: s.getCookie(r)})
+	connID := r.PathValue("connector")
+	name, maxAge := s.connectorCookie(connID)
+	resp, err := s.svc.Session(r.Context(), auth.SessionRequest{Connector: connID, SessionCookie: s.getCookieFor(r, name)})
 	if err != nil {
 		http.Error(w, err.Error(), errormap.StatusFor(err))
 		return
 	}
 	if resp.SetCookie != "" {
-		path, domain, maxAge, secure, httpOnly, sameSite := s.cookieOpts()
-		writeSessionCookie(w, s.cookie, resp.SetCookie, path, domain, maxAge, secure, httpOnly, sameSite)
+		path, domain, ma, secure, httpOnly, sameSite := s.cookieOptsForName(name, maxAge)
+		writeSessionCookie(w, name, resp.SetCookie, path, domain, ma, secure, httpOnly, sameSite)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
@@ -288,7 +344,9 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
-	resp, err := s.svc.Session(r.Context(), auth.SessionRequest{SessionCookie: s.getCookie(r)})
+	connID := r.PathValue("connector")
+	name, _ := s.connectorCookie(connID)
+	resp, err := s.svc.Session(r.Context(), auth.SessionRequest{Connector: connID, SessionCookie: s.getCookieFor(r, name)})
 	if err != nil {
 		http.Error(w, err.Error(), errormap.StatusFor(err))
 		return
@@ -304,6 +362,8 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	connID := r.PathValue("connector")
+	name, _ := s.connectorCookie(connID)
 	redirectTo := r.URL.Query().Get("redirect_to")
 	if redirectTo == "" {
 		redirectTo = r.FormValue("redirect_to")
@@ -311,7 +371,8 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	origin := r.Header.Get("Origin")
 	referer := r.Header.Get("Referer")
 	resp, err := s.svc.Logout(r.Context(), auth.LogoutRequest{
-		SessionCookie: s.getCookie(r),
+		Connector:     connID,
+		SessionCookie: s.getCookieFor(r, name),
 		RedirectTo:    redirectTo,
 		Origin:        origin,
 		Referer:       referer,
@@ -321,16 +382,15 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if resp.ClearCookie {
-		w.Header().Set("Set-Cookie", s.cookie+"=; Path=/; Max-Age=0; HttpOnly")
-		if bool(s.cfg.CookieSecure) {
-			w.Header().Add("Set-Cookie", s.cookie+"=; Path=/; Max-Age=0; HttpOnly; Secure")
-		}
+		s.clearCookie(w, name)
 	}
 	http.Redirect(w, r, resp.RedirectURL, http.StatusFound)
 }
 
 func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
-	resp, err := s.svc.Refresh(r.Context(), auth.RefreshRequest{SessionCookie: s.getCookie(r)})
+	connID := r.PathValue("connector")
+	name, maxAge := s.connectorCookie(connID)
+	resp, err := s.svc.Refresh(r.Context(), auth.RefreshRequest{Connector: connID, SessionCookie: s.getCookieFor(r, name)})
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
@@ -338,8 +398,8 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if resp.Refreshed && resp.SetCookieValue != "" {
-		path, domain, maxAge, secure, httpOnly, sameSite := s.cookieOpts()
-		writeSessionCookie(w, s.cookie, resp.SetCookieValue, path, domain, maxAge, secure, httpOnly, sameSite)
+		path, domain, ma, secure, httpOnly, sameSite := s.cookieOptsForName(name, maxAge)
+		writeSessionCookie(w, name, resp.SetCookieValue, path, domain, ma, secure, httpOnly, sameSite)
 	}
 	w.WriteHeader(http.StatusOK)
 }
@@ -350,7 +410,9 @@ func (s *Server) handleResolve(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not available", http.StatusNotImplemented)
 		return
 	}
-	accessToken, claims, tenantContext, setCookie, err := svc.Resolve(r.Context(), s.getCookie(r))
+	connID := r.URL.Query().Get("connector")
+	name, maxAge := s.connectorCookie(connID)
+	accessToken, claims, tenantContext, setCookie, err := svc.ResolveForConnector(r.Context(), connID, s.getCookieFor(r, name))
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
@@ -358,8 +420,8 @@ func (s *Server) handleResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if setCookie != "" {
-		path, domain, maxAge, secure, httpOnly, sameSite := s.cookieOpts()
-		writeSessionCookie(w, s.cookie, setCookie, path, domain, maxAge, secure, httpOnly, sameSite)
+		path, domain, ma, secure, httpOnly, sameSite := s.cookieOptsForName(name, maxAge)
+		writeSessionCookie(w, name, setCookie, path, domain, ma, secure, httpOnly, sameSite)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
@@ -367,6 +429,84 @@ func (s *Server) handleResolve(w http.ResponseWriter, r *http.Request) {
 		"claims":         claims,
 		"tenant_context": tenantContext,
 	})
+}
+
+// handleHandoffIssue mints a signed one-time handoff ticket for a user's existing session on
+// a connector. Admin-guarded (server-to-server). Returns the ticket and a ready redeem URL.
+func (s *Server) handleHandoffIssue(w http.ResponseWriter, r *http.Request) {
+	if subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Admin-Secret")), []byte(s.cfg.AdminSecret)) != 1 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":"forbidden"}`))
+		return
+	}
+	svc, ok := s.svc.(*service.Service)
+	if !ok || !svc.HandoffEnabled() {
+		http.Error(w, "not available", http.StatusNotImplemented)
+		return
+	}
+	var body struct {
+		Connector string `json:"connector"`
+		Lookup    struct {
+			Subject string `json:"subject"`
+			Email   string `json:"email"`
+		} `json:"lookup"`
+		RedirectTo string `json:"redirect_to"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	if body.Lookup.Subject == "" || body.Lookup.Email == "" {
+		http.Error(w, "lookup.subject and lookup.email required", http.StatusBadRequest)
+		return
+	}
+	ticket, err := svc.IssueHandoff(r.Context(), body.Connector, body.Lookup.Subject, body.Lookup.Email)
+	if err != nil {
+		s.logger.Printf("audit: handoff_issue_failed connector=%s reason=%v", body.Connector, err)
+		http.Error(w, err.Error(), errormap.StatusFor(err))
+		return
+	}
+	redeemURL := strings.TrimSuffix(s.cfg.AppBaseURL, "/") + "/handoff/redeem"
+	if body.Connector != "" {
+		redeemURL += "/" + url.PathEscape(body.Connector)
+	}
+	q := url.Values{}
+	q.Set("ticket", ticket)
+	if body.RedirectTo != "" {
+		q.Set("redirect_to", body.RedirectTo)
+	}
+	redeemURL += "?" + q.Encode()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ticket": ticket, "redeem_url": redeemURL})
+}
+
+// handleHandoffRedeem redeems a one-time handoff ticket: it sets the connector session cookie
+// and redirects to the (validated) target. Public — the signed ticket is the credential.
+func (s *Server) handleHandoffRedeem(w http.ResponseWriter, r *http.Request) {
+	svc, ok := s.svc.(*service.Service)
+	if !ok || !svc.HandoffEnabled() {
+		http.Error(w, "not available", http.StatusNotImplemented)
+		return
+	}
+	connID := r.PathValue("connector")
+	ticket := r.URL.Query().Get("ticket")
+	if ticket == "" {
+		http.Error(w, "missing ticket", http.StatusBadRequest)
+		return
+	}
+	cookieValue, connector, err := svc.RedeemHandoff(r.Context(), connID, ticket)
+	if err != nil {
+		s.logger.Printf("audit: handoff_redeem_failed connector=%s reason=%v", connID, err)
+		http.Redirect(w, r, s.cfg.AppBaseURL+s.cfg.LoginErrorRedirectPath, http.StatusFound)
+		return
+	}
+	name, maxAge := s.connectorCookie(connector)
+	path, domain, ma, secure, httpOnly, sameSite := s.cookieOptsForName(name, maxAge)
+	writeSessionCookie(w, name, cookieValue, path, domain, ma, secure, httpOnly, sameSite)
+	redirectTo := svc.ValidateRedirectURL(r.URL.Query().Get("redirect_to"))
+	s.logger.Printf("audit: handoff_redeem_success connector=%s", connector)
+	http.Redirect(w, r, redirectTo, http.StatusFound)
 }
 
 func (s *Server) handlePatchSession(w http.ResponseWriter, r *http.Request) {

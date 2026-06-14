@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -34,10 +35,19 @@ func NewAuthClient(baseURL, cookieName string) *AuthClient {
 	}
 }
 
-// Resolve calls GET /internal/resolve with the session cookie and returns session data.
+// Resolve calls GET /internal/resolve with the session cookie (default connector).
 func (c *AuthClient) Resolve(ctx context.Context, sessionCookie string) (*ResolveResponse, error) {
-	url := c.baseURL + "/internal/resolve"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	return c.ResolveConnector(ctx, sessionCookie, "")
+}
+
+// ResolveConnector calls GET /internal/resolve?connector=<id> with the session cookie and
+// returns session data. An empty connectorID resolves against the default connector.
+func (c *AuthClient) ResolveConnector(ctx context.Context, sessionCookie, connectorID string) (*ResolveResponse, error) {
+	reqURL := c.baseURL + "/internal/resolve"
+	if connectorID != "" {
+		reqURL += "?connector=" + url.QueryEscape(connectorID)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
 		return nil, err
 	}

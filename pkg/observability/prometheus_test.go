@@ -51,6 +51,40 @@ accessgate_agent_flow_operations_total{operation="logout",result="ok"} 1
 	}
 }
 
+func TestPrometheusMetrics_MultiConnectorCounters(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m, _ := NewPrometheusMetrics(reg)
+	m.ConnectorCallback("telegram", true)
+	m.HandoffIssued("telegram", true)
+	m.HandoffRedeemed("telegram", false)
+	m.ProxyRouteOutcome("web", "allow")
+	m.ProxyRouteOutcome("", "route_miss")
+
+	if err := testutil.GatherAndCompare(reg, strings.NewReader(`
+# HELP accessgate_auth_callbacks_total OIDC callback (login completion) outcomes by connector and result.
+# TYPE accessgate_auth_callbacks_total counter
+accessgate_auth_callbacks_total{connector_id="telegram",result="ok"} 1
+`), "accessgate_auth_callbacks_total"); err != nil {
+		t.Fatal(err)
+	}
+	if err := testutil.GatherAndCompare(reg, strings.NewReader(`
+# HELP accessgate_auth_handoff_total Handoff ticket issue/redeem outcomes by operation, connector, and result.
+# TYPE accessgate_auth_handoff_total counter
+accessgate_auth_handoff_total{connector_id="telegram",operation="issue",result="ok"} 1
+accessgate_auth_handoff_total{connector_id="telegram",operation="redeem",result="fail"} 1
+`), "accessgate_auth_handoff_total"); err != nil {
+		t.Fatal(err)
+	}
+	if err := testutil.GatherAndCompare(reg, strings.NewReader(`
+# HELP accessgate_proxy_route_outcomes_total Proxy request outcomes by route and outcome (allow/auth_failure/upstream_failure/route_miss).
+# TYPE accessgate_proxy_route_outcomes_total counter
+accessgate_proxy_route_outcomes_total{outcome="allow",route="web"} 1
+accessgate_proxy_route_outcomes_total{outcome="route_miss",route=""} 1
+`), "accessgate_proxy_route_outcomes_total"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestPrometheusMetrics_PluginHealthState(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	m, _ := NewPrometheusMetrics(reg)

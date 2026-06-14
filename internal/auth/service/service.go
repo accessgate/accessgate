@@ -12,10 +12,12 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/accessgate/accessgate/internal/auth/config"
+	"github.com/accessgate/accessgate/internal/auth/handoff"
 	"github.com/accessgate/accessgate/internal/plugin"
 	"github.com/accessgate/accessgate/pkg/auth"
 	"github.com/accessgate/accessgate/pkg/cookie"
@@ -26,23 +28,53 @@ import (
 	"github.com/accessgate/accessgate/pkg/token"
 )
 
+// SubjectEmailFinder locates a session by subject+email within a connector's namespace.
+// The Redis store implements it; it is optional per connector (needed only for handoff issue).
+type SubjectEmailFinder interface {
+	FindSessionBySubjectEmail(ctx context.Context, subject, email string) (*pkgsession.Session, error)
+}
+
+// connector bundles the per-connector runtime state: its provider, namespaced stores,
+// cookie, and resolved config. One auth Service holds one or more connectors.
+type connector struct {
+	cfg         config.ConnectorConfig
+	provider    plugin.ProviderPlugin
+	sessions    pkgsession.SessionStore
+	pkce        pkgsession.PKCEStore
+	refreshLock pkgsession.RefreshLockStore
+	finder      SubjectEmailFinder
+	cookieName  string
+	cookieOpts  cookie.CookieOptions
+}
+
+// Connector is the wiring for one identity connector passed to NewMultiConnector.
+type Connector struct {
+	Config      config.ConnectorConfig
+	Provider    plugin.ProviderPlugin
+	Sessions    pkgsession.SessionStore
+	PKCE        pkgsession.PKCEStore
+	RefreshLock pkgsession.RefreshLockStore
+	// Finder is optional; when set it enables handoff ticket issuance for this connector.
+	Finder SubjectEmailFinder
+}
+
 // Service implements auth.Service.
 type Service struct {
 	cfg           *config.Config
-	provider      plugin.ProviderPlugin
+	connectors    map[string]*connector
+	defaultID     string
 	jwks          token.JWKSSource
-	sessions      pkgsession.SessionStore
-	pkce          pkgsession.PKCEStore
-	refreshLock   pkgsession.RefreshLockStore
 	cookie        cookie.Manager
-	cookieOpts    cookie.CookieOptions
+	handoff       *handoff.Issuer
 	tracer        observability.Tracer
 	metrics       observability.Metrics
 	logger        *log.Logger
 	webhookClient *http.Client
 }
 
-// New creates an accessgate-auth Service.
+// New creates a single-connector accessgate-auth Service from explicit stores and provider.
+// It is the backward-compatible constructor: the connector is synthesized from cfg's default
+// connector (when present) or the legacy top-level OIDC fields.
 func New(
 	cfg *config.Config,
 	sessions pkgsession.SessionStore,
@@ -60,37 +92,17 @@ func New(
 	if provider == nil {
 		return nil, fmt.Errorf("provider is required")
 	}
-	opts := cookie.CookieOptions{
-		Path:     "/",
-		Domain:   cfg.CookieDomain,
-		Secure:   bool(cfg.CookieSecure),
-		HTTPOnly: true,
-		SameSite: cfg.CookieSameSite,
-		MaxAge:   cfg.SessionTTLSeconds,
-	}
-	if tracer == nil {
-		tracer = observability.NopTracer{}
-	}
-	if metrics == nil {
-		metrics = observability.NopMetrics{}
-	}
-	return &Service{
-		cfg:           cfg,
-		provider:      provider,
-		jwks:          jwks,
-		sessions:      sessions,
-		pkce:          pkce,
-		refreshLock:   refreshLock,
-		cookie:        cookieManager,
-		cookieOpts:    opts,
-		tracer:        tracer,
-		metrics:       metrics,
-		logger:        log.New(log.Writer(), "[accessgate-auth] ", log.LstdFlags|log.LUTC),
-		webhookClient: &http.Client{Timeout: 5 * time.Second},
-	}, nil
+	conns := []Connector{{
+		Config:      defaultConnectorConfig(cfg),
+		Provider:    provider,
+		Sessions:    sessions,
+		PKCE:        pkce,
+		RefreshLock: refreshLock,
+	}}
+	return newService(cfg, conns, cookieManager, jwks, tracer, metrics)
 }
 
-// NewWithRuntimeStoreProvider creates an accessgate-auth Service from the runtime store seam.
+// NewWithRuntimeStoreProvider creates a single-connector Service from the runtime store seam.
 func NewWithRuntimeStoreProvider(
 	cfg *config.Config,
 	stores pkgsession.RuntimeStoreProvider,
@@ -116,16 +128,152 @@ func NewWithRuntimeStoreProvider(
 	)
 }
 
+// NewMultiConnector creates a Service hosting multiple identity connectors. Each Connector
+// carries its own provider and namespaced stores (built by the caller from cfg.Connectors).
+func NewMultiConnector(
+	cfg *config.Config,
+	connectors []Connector,
+	cookieManager cookie.Manager,
+	jwks token.JWKSSource,
+	tracer observability.Tracer,
+	metrics observability.Metrics,
+) (*Service, error) {
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+	if len(connectors) == 0 {
+		return nil, fmt.Errorf("at least one connector is required")
+	}
+	return newService(cfg, connectors, cookieManager, jwks, tracer, metrics)
+}
+
+func newService(
+	cfg *config.Config,
+	connectors []Connector,
+	cookieManager cookie.Manager,
+	jwks token.JWKSSource,
+	tracer observability.Tracer,
+	metrics observability.Metrics,
+) (*Service, error) {
+	if tracer == nil {
+		tracer = observability.NopTracer{}
+	}
+	if metrics == nil {
+		metrics = observability.NopMetrics{}
+	}
+	s := &Service{
+		cfg:           cfg,
+		connectors:    make(map[string]*connector, len(connectors)),
+		jwks:          jwks,
+		cookie:        cookieManager,
+		tracer:        tracer,
+		metrics:       metrics,
+		logger:        log.New(log.Writer(), "[accessgate-auth] ", log.LstdFlags|log.LUTC),
+		webhookClient: &http.Client{Timeout: 5 * time.Second},
+	}
+	for _, c := range connectors {
+		if c.Provider == nil {
+			return nil, fmt.Errorf("connector %q: provider is required", c.Config.ID)
+		}
+		id := c.Config.ID
+		if id == "" {
+			id = "default"
+		}
+		cookieName := c.Config.CookieName
+		if cookieName == "" {
+			cookieName = cfg.CookieName
+		}
+		maxAge := c.Config.SessionTTLSeconds
+		if maxAge == 0 {
+			maxAge = cfg.SessionTTLSeconds
+		}
+		s.connectors[id] = &connector{
+			cfg:         c.Config,
+			provider:    c.Provider,
+			sessions:    c.Sessions,
+			pkce:        c.PKCE,
+			refreshLock: c.RefreshLock,
+			finder:      c.Finder,
+			cookieName:  cookieName,
+			cookieOpts: cookie.CookieOptions{
+				Path:     "/",
+				Domain:   cfg.CookieDomain,
+				Secure:   bool(cfg.CookieSecure),
+				HTTPOnly: true,
+				SameSite: cfg.CookieSameSite,
+				MaxAge:   maxAge,
+			},
+		}
+		// The connector marked default wins; otherwise the first connector is the default.
+		if bool(c.Config.Default) || s.defaultID == "" {
+			s.defaultID = id
+		}
+	}
+	return s, nil
+}
+
+// defaultConnectorConfig returns cfg's default connector when present, else a connector
+// config derived from the legacy top-level OIDC fields (with sub/oidc_sub claim mapping).
+func defaultConnectorConfig(cfg *config.Config) config.ConnectorConfig {
+	if dc := cfg.DefaultConnector(); dc != nil {
+		return *dc
+	}
+	return config.ConnectorConfig{
+		ID:                           "default",
+		Default:                      true,
+		ProviderPluginID:             cfg.ProviderPluginID,
+		OIDCIssuer:                   cfg.OIDCIssuer,
+		OIDCRedirectURI:              cfg.OIDCRedirectURI,
+		OIDCClientID:                 cfg.OIDCClientID,
+		OIDCClientSecret:             cfg.OIDCClientSecret,
+		OIDCScopes:                   cfg.OIDCScopes,
+		OIDCAudience:                 cfg.OIDCAudience,
+		OIDCClaimsSource:             cfg.OIDCClaimsSource,
+		SessionRedisPrefix:           cfg.SessionRedisPrefix,
+		CookieName:                   cfg.CookieName,
+		SessionTTLSeconds:            cfg.SessionTTLSeconds,
+		SessionPKCETTLSeconds:        cfg.SessionPKCETTLSeconds,
+		SessionRefreshLockTTLSeconds: cfg.SessionRefreshLockTTLSeconds,
+		ClaimMapping:                 config.ClaimMappingConfig{AuthoritativeIDClaim: "sub", IDKind: "oidc_sub"},
+	}
+}
+
+// conn resolves a connector by id; an empty id selects the default connector.
+func (s *Service) conn(id string) (*connector, error) {
+	if id == "" {
+		id = s.defaultID
+	}
+	c, ok := s.connectors[id]
+	if !ok {
+		return nil, fmt.Errorf("unknown connector %q", id)
+	}
+	return c, nil
+}
+
+// ConnectorCookieName returns the session cookie name for the given connector
+// (empty id = default). It lets the HTTP layer read/write the right cookie.
+func (s *Service) ConnectorCookieName(id string) string {
+	c, err := s.conn(id)
+	if err != nil {
+		return s.cfg.CookieName
+	}
+	return c.cookieName
+}
+
 // Session implements auth.Service.
 func (s *Service) Session(ctx context.Context, req auth.SessionRequest) (*auth.SessionResponse, error) {
 	if req.SessionCookie == "" {
+		return &auth.SessionResponse{IsAuthenticated: false}, nil
+	}
+	c, err := s.conn(req.Connector)
+	if err != nil {
 		return &auth.SessionResponse{IsAuthenticated: false}, nil
 	}
 	var sessionID string
 	if err := s.cookie.Decode(req.SessionCookie, &sessionID); err != nil {
 		return &auth.SessionResponse{IsAuthenticated: false}, nil
 	}
-	sess, err := s.sessions.Get(ctx, sessionID)
+	sess, err := c.sessions.Get(ctx, sessionID)
 	if err != nil || sess == nil {
 		return &auth.SessionResponse{IsAuthenticated: false}, nil
 	}
@@ -138,9 +286,14 @@ func (s *Service) Session(ctx context.Context, req auth.SessionRequest) (*auth.S
 
 // LoginStart implements auth.Service.
 func (s *Service) LoginStart(ctx context.Context, req auth.LoginStartRequest) (*auth.LoginStartResponse, error) {
-	ctx, span := s.tracer.StartSpan(ctx, "auth.login_start", "redirect_to", req.RedirectTo)
+	ctx, span := s.tracer.StartSpan(ctx, "auth.login_start", "connector", req.Connector, "redirect_to", req.RedirectTo)
 	defer span.End()
 	s.metrics.LoginStarted()
+
+	c, err := s.conn(req.Connector)
+	if err != nil {
+		return nil, err
+	}
 
 	redirectTo := ValidateRedirect(req.RedirectTo, s.cfg.AppBaseURL, s.cfg.AllowedRedirectOrigins, s.cfg.AllowedRedirectPaths)
 	if redirectTo == "" && req.RedirectTo != "" {
@@ -162,13 +315,13 @@ func (s *Service) LoginStart(ctx context.Context, req auth.LoginStartRequest) (*
 	}
 	pkceSpan.End()
 	_, pkceStoreSpan := s.tracer.StartSpan(ctx, "auth.pkce_store_set")
-	err = s.pkce.Set(ctx, state, &pkgsession.PKCEState{
+	err = c.pkce.Set(ctx, state, &pkgsession.PKCEState{
 		State:         state,
 		CodeVerifier:  verifier,
 		CodeChallenge: challenge,
 		Nonce:         nonce,
 		RedirectTo:    redirectTo,
-	}, s.cfg.SessionPKCETTLSeconds)
+	}, c.cfg.SessionPKCETTLSeconds)
 	if err != nil {
 		pkceStoreSpan.End()
 		return nil, err
@@ -179,7 +332,7 @@ func (s *Service) LoginStart(ctx context.Context, req auth.LoginStartRequest) (*
 	if prompt := strings.TrimSpace(req.Prompt); prompt != "" {
 		extraParams = map[string]string{"prompt": prompt}
 	}
-	authURL, err := s.provider.AuthorizationURL(ctx, state, challenge, nonce, extraParams)
+	authURL, err := c.provider.AuthorizationURL(ctx, state, challenge, nonce, extraParams)
 	if err != nil {
 		authURLSpan.End()
 		return nil, err
@@ -190,10 +343,16 @@ func (s *Service) LoginStart(ctx context.Context, req auth.LoginStartRequest) (*
 
 // LoginEnd implements auth.Service.
 func (s *Service) LoginEnd(ctx context.Context, req auth.LoginEndRequest) (*auth.LoginEndResponse, error) {
-	ctx, span := s.tracer.StartSpan(ctx, "auth.login_end", "state_present", req.State != "", "code_present", req.Code != "")
+	ctx, span := s.tracer.StartSpan(ctx, "auth.login_end", "connector", req.Connector, "state_present", req.State != "", "code_present", req.Code != "")
 	defer span.End()
 	success := false
 	defer func() { s.metrics.LoginCompleted(success) }()
+
+	c, err := s.conn(req.Connector)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { s.metrics.ConnectorCallback(c.cfg.ID, success) }()
 
 	if req.Error != "" {
 		redirectURL := s.cfg.AppBaseURL + s.cfg.LoginErrorRedirectPath
@@ -204,30 +363,30 @@ func (s *Service) LoginEnd(ctx context.Context, req auth.LoginEndRequest) (*auth
 		return &auth.LoginEndResponse{RedirectURL: redirectURL, ClearCookie: true}, nil
 	}
 	_, pkceGetSpan := s.tracer.StartSpan(ctx, "auth.pkce_get")
-	p, err := s.pkce.Get(ctx, req.State)
+	p, err := c.pkce.Get(ctx, req.State)
 	if err != nil || p == nil {
 		pkceGetSpan.End()
-		s.logger.Printf("audit: login_end pkce_miss host=%s", req.Host)
+		s.logger.Printf("audit: login_end pkce_miss connector=%s host=%s", c.cfg.ID, req.Host)
 		redirectURL := s.cfg.AppBaseURL + s.cfg.LoginErrorRedirectPath
 		return &auth.LoginEndResponse{RedirectURL: redirectURL, ClearCookie: true}, nil
 	}
 	pkceGetSpan.End()
-	_ = s.pkce.Delete(ctx, req.State)
+	_ = c.pkce.Delete(ctx, req.State)
 	_, exchangeSpan := s.tracer.StartSpan(ctx, "auth.oidc_exchange_code")
-	tr, err := s.provider.ExchangeCode(ctx, req.Code, p.CodeVerifier, s.cfg.OIDCRedirectURI)
+	tr, err := c.provider.ExchangeCode(ctx, req.Code, p.CodeVerifier, c.cfg.OIDCRedirectURI)
 	if err != nil {
 		exchangeSpan.End()
-		s.logger.Printf("audit: login_end exchange_failed host=%s", req.Host)
+		s.logger.Printf("audit: login_end exchange_failed connector=%s host=%s", c.cfg.ID, req.Host)
 		redirectURL := s.cfg.AppBaseURL + s.cfg.LoginErrorRedirectPath
 		return &auth.LoginEndResponse{RedirectURL: redirectURL, ClearCookie: true}, nil
 	}
 	exchangeSpan.End()
-	audience := s.cfg.OIDCAudience
+	audience := c.cfg.OIDCAudience
 	if audience == "" {
-		audience = s.cfg.OIDCClientID
+		audience = c.cfg.OIDCClientID
 	}
 	_, validateSpan := s.tracer.StartSpan(ctx, "auth.token_validate_id_token")
-	principal, err := token.ValidateIDToken(ctx, tr.IDToken, s.jwks, s.cfg.OIDCIssuer, audience, p.Nonce)
+	principal, err := token.ValidateIDToken(ctx, tr.IDToken, s.jwks, c.cfg.OIDCIssuer, audience, p.Nonce)
 	if err != nil {
 		validateSpan.End()
 		s.logger.Printf("audit: login_end token_invalid host=%s reason=%v", req.Host, err)
@@ -244,7 +403,18 @@ func (s *Service) LoginEnd(ctx context.Context, req auth.LoginEndRequest) (*auth
 	if claims == nil {
 		claims = make(map[string]any)
 	}
-	claims["sub"] = principal.Subject
+	// Connector-specific identity normalization: choose the authoritative downstream id
+	// (e.g. a Telegram numeric id) per the connector's claim-mapping policy, falling back
+	// to the OIDC sub. Carried in claims["sub"] so it flows unchanged to the proxy and
+	// downstream X-User-Id, with the source recorded for observability/audit.
+	authID := principal.Subject
+	if mapped := s.authoritativeID(c, principal.Claims); mapped != "" {
+		authID = mapped
+	}
+	claims["sub"] = authID
+	if c.cfg.ClaimMapping.IDKind != "" {
+		claims["authoritative_id_kind"] = c.cfg.ClaimMapping.IDKind
+	}
 	if principal.Roles != nil {
 		claims["roles"] = principal.Roles
 	}
@@ -261,7 +431,7 @@ func (s *Service) LoginEnd(ctx context.Context, req auth.LoginEndRequest) (*auth
 		Claims:       claims,
 	}
 	_, sessionSetSpan := s.tracer.StartSpan(ctx, "auth.session_store_set")
-	err = s.sessions.Set(ctx, sessID, sess, s.cfg.SessionTTLSeconds)
+	err = c.sessions.Set(ctx, sessID, sess, c.cfg.SessionTTLSeconds)
 	if err != nil {
 		sessionSetSpan.End()
 		return nil, err
@@ -296,6 +466,37 @@ func getClaimString(m map[string]any, key string) string {
 		return v
 	}
 	return ""
+}
+
+// authoritativeID returns the connector's authoritative downstream id from the IdP claims,
+// per its ClaimMapping. Returns "" when the configured claim is "sub" (use principal.Subject)
+// or is absent. Numeric ids (e.g. Telegram) are coerced to their string form.
+func (s *Service) authoritativeID(c *connector, claims map[string]any) string {
+	key := c.cfg.ClaimMapping.AuthoritativeIDClaim
+	if key == "" || key == "sub" || claims == nil {
+		return ""
+	}
+	return claimToString(claims[key])
+}
+
+// claimToString coerces a claim value (string or JSON number) to a string. It returns ""
+// for absent or non-scalar values so callers fall back to the default id.
+func claimToString(v any) string {
+	switch x := v.(type) {
+	case string:
+		return x
+	case json.Number:
+		return x.String()
+	case float64:
+		// JSON numbers decode to float64; render integers without a decimal point.
+		return strconv.FormatFloat(x, 'f', -1, 64)
+	case int64:
+		return strconv.FormatInt(x, 10)
+	case int:
+		return strconv.Itoa(x)
+	default:
+		return ""
+	}
 }
 
 func (s *Service) callPostLoginWebhook(ctx context.Context, webhookURL, sessionID, subject, email string, claims map[string]any, host string) error {
@@ -342,11 +543,15 @@ func (s *Service) callPostLoginWebhook(ctx context.Context, webhookURL, sessionI
 
 // Refresh implements auth.Service.
 func (s *Service) Refresh(ctx context.Context, req auth.RefreshRequest) (*auth.RefreshResponse, error) {
-	ctx, span := s.tracer.StartSpan(ctx, "auth.refresh")
+	ctx, span := s.tracer.StartSpan(ctx, "auth.refresh", "connector", req.Connector)
 	defer span.End()
 	success := false
 	defer func() { s.metrics.RefreshCompleted(success) }()
 
+	c, err := s.conn(req.Connector)
+	if err != nil {
+		return nil, err
+	}
 	if req.SessionCookie == "" {
 		return nil, fmt.Errorf("no session cookie")
 	}
@@ -355,7 +560,7 @@ func (s *Service) Refresh(ctx context.Context, req auth.RefreshRequest) (*auth.R
 		return nil, fmt.Errorf("invalid cookie")
 	}
 	_, sessionGetSpan := s.tracer.StartSpan(ctx, "auth.session_store_get")
-	sess, err := s.sessions.Get(ctx, sessionID)
+	sess, err := c.sessions.Get(ctx, sessionID)
 	if err != nil || sess == nil {
 		sessionGetSpan.End()
 		return nil, fmt.Errorf("session not found")
@@ -369,15 +574,15 @@ func (s *Service) Refresh(ctx context.Context, req auth.RefreshRequest) (*auth.R
 		return &auth.RefreshResponse{}, nil
 	}
 	_, lockSpan := s.tracer.StartSpan(ctx, "auth.refresh_lock_obtain")
-	ok, err := s.refreshLock.Obtain(ctx, sessionID, s.cfg.SessionRefreshLockTTLSeconds)
+	ok, err := c.refreshLock.Obtain(ctx, sessionID, c.cfg.SessionRefreshLockTTLSeconds)
 	if err != nil || !ok {
 		lockSpan.End()
 		return &auth.RefreshResponse{}, nil
 	}
 	lockSpan.End()
-	defer func() { _ = s.refreshLock.Release(ctx, sessionID) }()
+	defer func() { _ = c.refreshLock.Release(ctx, sessionID) }()
 	_, providerRefreshSpan := s.tracer.StartSpan(ctx, "auth.oidc_refresh")
-	tr, err := s.provider.Refresh(ctx, sess.RefreshToken)
+	tr, err := c.provider.Refresh(ctx, sess.RefreshToken)
 	if err != nil {
 		providerRefreshSpan.End()
 		s.logger.Printf("audit: refresh_failed session_id=%s reason=%v", sessionID, err)
@@ -397,20 +602,20 @@ func (s *Service) Refresh(ctx context.Context, req auth.RefreshRequest) (*auth.R
 	}
 	if tr.IDToken != "" {
 		sess.IDToken = tr.IDToken
-		aud := s.cfg.OIDCAudience
+		aud := c.cfg.OIDCAudience
 		if aud == "" {
-			aud = s.cfg.OIDCClientID
+			aud = c.cfg.OIDCClientID
 		}
 		_, validateSpan := s.tracer.StartSpan(ctx, "auth.token_validate_id_token_refresh")
 		// nonce validation intentionally skipped on token refresh per OIDC Core §12.2
-		principal, err := token.ValidateIDToken(ctx, tr.IDToken, s.jwks, s.cfg.OIDCIssuer, aud, "")
+		principal, err := token.ValidateIDToken(ctx, tr.IDToken, s.jwks, c.cfg.OIDCIssuer, aud, "")
 		if err == nil && principal.Claims != nil {
-			sess.Claims = principal.Claims
+			s.applyRefreshedClaims(c, sess, principal.Claims)
 		}
 		validateSpan.End()
 	}
 	_, sessionSetSpan := s.tracer.StartSpan(ctx, "auth.session_store_set")
-	err = s.sessions.Set(ctx, sessionID, sess, s.cfg.SessionTTLSeconds)
+	err = c.sessions.Set(ctx, sessionID, sess, c.cfg.SessionTTLSeconds)
 	if err != nil {
 		sessionSetSpan.End()
 		return nil, err
@@ -431,33 +636,77 @@ func (s *Service) Refresh(ctx context.Context, req auth.RefreshRequest) (*auth.R
 	}, nil
 }
 
-// EnsureFreshSessionByID loads a session and refreshes its OIDC tokens when the
-// configured early-refresh window says they are close to expiry.
+// applyRefreshedClaims replaces the session claims with the refreshed token's claims while
+// preserving the connector's authoritative downstream id. If the refreshed token omits the
+// configured authoritative claim (e.g. a Telegram refresh that carries no tg id), the prior
+// established id and kind are retained so the downstream identity stays stable.
+func (s *Service) applyRefreshedClaims(c *connector, sess *pkgsession.Session, newClaims map[string]any) {
+	prevSub := getClaimString(sess.Claims, "sub")
+	prevKind := getClaimString(sess.Claims, "authoritative_id_kind")
+	sess.Claims = newClaims
+	authID := getClaimString(newClaims, "sub")
+	if mapped := s.authoritativeID(c, newClaims); mapped != "" {
+		authID = mapped
+	} else if c.cfg.ClaimMapping.AuthoritativeIDClaim != "" && c.cfg.ClaimMapping.AuthoritativeIDClaim != "sub" && prevSub != "" {
+		authID = prevSub
+	}
+	if authID != "" {
+		newClaims["sub"] = authID
+	}
+	switch {
+	case c.cfg.ClaimMapping.IDKind != "":
+		newClaims["authoritative_id_kind"] = c.cfg.ClaimMapping.IDKind
+	case prevKind != "":
+		newClaims["authoritative_id_kind"] = prevKind
+	}
+}
+
+// EnsureFreshSessionByID loads a session from the default connector and refreshes its OIDC
+// tokens when close to expiry. Retained for backward compatibility; multi-connector callers
+// should use EnsureFreshSessionForConnector.
 func (s *Service) EnsureFreshSessionByID(ctx context.Context, sessionID string) (*pkgsession.Session, bool, error) {
+	c, err := s.conn("")
+	if err != nil {
+		return nil, false, err
+	}
+	return s.ensureFresh(ctx, c, sessionID)
+}
+
+// EnsureFreshSessionForConnector loads a session from the named connector (empty = default)
+// and refreshes its OIDC tokens when close to expiry.
+func (s *Service) EnsureFreshSessionForConnector(ctx context.Context, connectorID, sessionID string) (*pkgsession.Session, bool, error) {
+	c, err := s.conn(connectorID)
+	if err != nil {
+		return nil, false, err
+	}
+	return s.ensureFresh(ctx, c, sessionID)
+}
+
+func (s *Service) ensureFresh(ctx context.Context, c *connector, sessionID string) (*pkgsession.Session, bool, error) {
 	if sessionID == "" {
 		return nil, false, fmt.Errorf("session id required")
 	}
-	sess, err := s.sessions.Get(ctx, sessionID)
+	sess, err := c.sessions.Get(ctx, sessionID)
 	if err != nil || sess == nil {
 		return nil, false, fmt.Errorf("session not found")
 	}
 	if sess.RefreshToken == "" || !sess.NeedsRefresh(time.Now(), s.cfg.SessionRefreshEarlySeconds) {
 		return sess, false, nil
 	}
-	ok, err := s.refreshLock.Obtain(ctx, sessionID, s.cfg.SessionRefreshLockTTLSeconds)
+	ok, err := c.refreshLock.Obtain(ctx, sessionID, c.cfg.SessionRefreshLockTTLSeconds)
 	if err != nil {
 		return nil, false, fmt.Errorf("refresh lock obtain failed: %w", err)
 	}
 	if !ok {
-		sess, err = s.sessions.Get(ctx, sessionID)
+		sess, err = c.sessions.Get(ctx, sessionID)
 		if err != nil || sess == nil {
 			return nil, false, fmt.Errorf("session not found")
 		}
 		return sess, false, nil
 	}
-	defer func() { _ = s.refreshLock.Release(ctx, sessionID) }()
+	defer func() { _ = c.refreshLock.Release(ctx, sessionID) }()
 
-	sess, err = s.sessions.Get(ctx, sessionID)
+	sess, err = c.sessions.Get(ctx, sessionID)
 	if err != nil || sess == nil {
 		return nil, false, fmt.Errorf("session not found")
 	}
@@ -465,7 +714,7 @@ func (s *Service) EnsureFreshSessionByID(ctx context.Context, sessionID string) 
 		return sess, false, nil
 	}
 
-	tr, err := s.provider.Refresh(ctx, sess.RefreshToken)
+	tr, err := c.provider.Refresh(ctx, sess.RefreshToken)
 	if err != nil {
 		s.logger.Printf("audit: refresh_failed session_id=%s reason=%v", sessionID, err)
 		return nil, false, fmt.Errorf("refresh failed: %w", err)
@@ -483,16 +732,16 @@ func (s *Service) EnsureFreshSessionByID(ctx context.Context, sessionID string) 
 	}
 	if tr.IDToken != "" {
 		sess.IDToken = tr.IDToken
-		aud := s.cfg.OIDCAudience
+		aud := c.cfg.OIDCAudience
 		if aud == "" {
-			aud = s.cfg.OIDCClientID
+			aud = c.cfg.OIDCClientID
 		}
-		principal, err := token.ValidateIDToken(ctx, tr.IDToken, s.jwks, s.cfg.OIDCIssuer, aud, "")
+		principal, err := token.ValidateIDToken(ctx, tr.IDToken, s.jwks, c.cfg.OIDCIssuer, aud, "")
 		if err == nil && principal.Claims != nil {
-			sess.Claims = principal.Claims
+			s.applyRefreshedClaims(c, sess, principal.Claims)
 		}
 	}
-	if err := s.sessions.Set(ctx, sessionID, sess, s.cfg.SessionTTLSeconds); err != nil {
+	if err := c.sessions.Set(ctx, sessionID, sess, c.cfg.SessionTTLSeconds); err != nil {
 		return nil, false, err
 	}
 	s.logger.Printf("audit: refresh_success session_id=%s", sessionID)
@@ -501,9 +750,14 @@ func (s *Service) EnsureFreshSessionByID(ctx context.Context, sessionID string) 
 
 // Logout implements auth.Service.
 func (s *Service) Logout(ctx context.Context, req auth.LogoutRequest) (*auth.LogoutResponse, error) {
-	ctx, span := s.tracer.StartSpan(ctx, "auth.logout")
+	ctx, span := s.tracer.StartSpan(ctx, "auth.logout", "connector", req.Connector)
 	defer span.End()
 	defer s.metrics.LogoutCompleted()
+
+	c, err := s.conn(req.Connector)
+	if err != nil {
+		return nil, err
+	}
 
 	// CSRF: for POST, check Origin/Referer against allowed
 	if req.Origin != "" || req.Referer != "" {
@@ -533,16 +787,16 @@ func (s *Service) Logout(ctx context.Context, req auth.LogoutRequest) (*auth.Log
 	var idTokenHint string
 	if sessionID != "" {
 		_, sessGetSpan := s.tracer.StartSpan(ctx, "auth.session_store_get_logout")
-		sess, _ := s.sessions.Get(ctx, sessionID)
+		sess, _ := c.sessions.Get(ctx, sessionID)
 		if sess != nil {
 			idTokenHint = sess.IDToken
-			_ = s.sessions.Delete(ctx, sessionID)
+			_ = c.sessions.Delete(ctx, sessionID)
 			s.logger.Printf("audit: logout session_id=%s subject=%s", sessionID, getClaimString(sess.Claims, "sub"))
 		}
 		sessGetSpan.End()
 	}
 	_, endURLSpan := s.tracer.StartSpan(ctx, "auth.oidc_end_session")
-	endURL, err := s.provider.EndSessionURL(ctx, idTokenHint, redirectTo)
+	endURL, err := c.provider.EndSessionURL(ctx, idTokenHint, redirectTo)
 	if err != nil {
 		endURLSpan.End()
 		return &auth.LogoutResponse{RedirectURL: redirectTo, ClearCookie: true}, nil
@@ -569,16 +823,26 @@ func generateSessionID() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// Resolve returns access_token and claims for the proxy (internal use). If the session was refreshed, setCookieValue is non-empty.
+// Resolve returns access_token and claims for the proxy (internal use), using the default
+// connector. If the session was refreshed, setCookieValue is non-empty.
 func (s *Service) Resolve(ctx context.Context, sessionCookie string) (accessToken string, claims map[string]any, tenantContext map[string]any, setCookieValue string, err error) {
+	return s.ResolveForConnector(ctx, "", sessionCookie)
+}
+
+// ResolveForConnector resolves a session against the named connector (empty = default).
+func (s *Service) ResolveForConnector(ctx context.Context, connectorID, sessionCookie string) (accessToken string, claims map[string]any, tenantContext map[string]any, setCookieValue string, err error) {
 	if sessionCookie == "" {
 		return "", nil, nil, "", fmt.Errorf("no session cookie")
+	}
+	c, err := s.conn(connectorID)
+	if err != nil {
+		return "", nil, nil, "", err
 	}
 	var sessionID string
 	if err := s.cookie.Decode(sessionCookie, &sessionID); err != nil {
 		return "", nil, nil, "", fmt.Errorf("invalid cookie")
 	}
-	sess, refreshed, err := s.EnsureFreshSessionByID(ctx, sessionID)
+	sess, refreshed, err := s.ensureFresh(ctx, c, sessionID)
 	if err != nil {
 		return "", nil, nil, "", err
 	}
@@ -606,17 +870,118 @@ func (s *Service) Resolve(ctx context.Context, sessionCookie string) (accessToke
 	return sess.AccessToken, claims, tc, cookieValue, nil
 }
 
-// AttachTenantContext updates the session's tenant_context (Option A enrichment).
+// AttachTenantContext updates the session's tenant_context on the default connector
+// (Option A enrichment). Multi-connector callers should use AttachTenantContextForConnector.
 func (s *Service) AttachTenantContext(ctx context.Context, sessionID string, tc *pkgsession.TenantContext) error {
+	return s.AttachTenantContextForConnector(ctx, "", sessionID, tc)
+}
+
+// AttachTenantContextForConnector updates the session's tenant_context on the named connector
+// (empty = default).
+func (s *Service) AttachTenantContextForConnector(ctx context.Context, connectorID, sessionID string, tc *pkgsession.TenantContext) error {
 	if sessionID == "" || tc == nil {
 		return fmt.Errorf("session_id and tenant_context required")
 	}
-	sess, err := s.sessions.Get(ctx, sessionID)
+	c, err := s.conn(connectorID)
+	if err != nil {
+		return err
+	}
+	sess, err := c.sessions.Get(ctx, sessionID)
 	if err != nil || sess == nil {
 		return fmt.Errorf("session not found")
 	}
 	sess.TenantContext = tc
-	return s.sessions.Set(ctx, sessionID, sess, s.cfg.SessionTTLSeconds)
+	return c.sessions.Set(ctx, sessionID, sess, c.cfg.SessionTTLSeconds)
+}
+
+// EnableHandoff turns on the signed one-time handoff ticket feature, signing tickets with the
+// cookie signing secret and using once for replay protection. ttlSeconds<=0 uses the default.
+func (s *Service) EnableHandoff(once handoff.OnceStore, ttlSeconds int) {
+	s.handoff = handoff.NewIssuer(s.cfg.CookieSigningSecret, time.Duration(ttlSeconds)*time.Second, once)
+}
+
+// HandoffEnabled reports whether handoff issuance/redemption is configured.
+func (s *Service) HandoffEnabled() bool { return s.handoff != nil }
+
+// IssueHandoff mints a one-time handoff ticket for the user's existing session on the named
+// connector (empty = default), located by subject+email. The connector must have a Finder.
+func (s *Service) IssueHandoff(ctx context.Context, connectorID, subject, email string) (string, error) {
+	if s.handoff == nil {
+		return "", fmt.Errorf("handoff not enabled")
+	}
+	c, err := s.conn(connectorID)
+	if err != nil {
+		return "", err
+	}
+	if c.finder == nil {
+		return "", fmt.Errorf("handoff: connector %q has no session finder", c.cfg.ID)
+	}
+	sess, err := c.finder.FindSessionBySubjectEmail(ctx, subject, email)
+	if err != nil {
+		return "", fmt.Errorf("handoff: session lookup failed: %w", err)
+	}
+	if sess == nil {
+		return "", fmt.Errorf("handoff: session not found")
+	}
+	jti, err := generateSessionID()
+	if err != nil {
+		return "", err
+	}
+	ctx, span := s.tracer.StartSpan(ctx, "auth.handoff_issue", "connector", c.cfg.ID)
+	defer span.End()
+	authID := getClaimString(sess.Claims, "sub")
+	ticket, err := s.handoff.Issue(c.cfg.ID, authID, sess.ID, jti)
+	s.metrics.HandoffIssued(c.cfg.ID, err == nil)
+	return ticket, err
+}
+
+// RedeemHandoff verifies and one-time-consumes a handoff ticket, confirms the referenced
+// session still exists on its connector, and returns the encoded session cookie value plus
+// the connector id the cookie belongs to. connectorID (from the redeem path) must match the
+// ticket's connector when non-empty.
+func (s *Service) RedeemHandoff(ctx context.Context, connectorID, ticket string) (cookieValue, connector string, err error) {
+	if s.handoff == nil {
+		return "", "", fmt.Errorf("handoff not enabled")
+	}
+	ctx, span := s.tracer.StartSpan(ctx, "auth.handoff_redeem", "connector", connectorID)
+	defer span.End()
+	defer func() {
+		label := connector
+		if label == "" {
+			label = connectorID
+		}
+		s.metrics.HandoffRedeemed(label, err == nil)
+	}()
+	t, err := s.handoff.Redeem(ctx, ticket)
+	if err != nil {
+		return "", "", err
+	}
+	if connectorID != "" && t.ConnectorID != connectorID {
+		return "", "", fmt.Errorf("handoff: connector mismatch")
+	}
+	c, err := s.conn(t.ConnectorID)
+	if err != nil {
+		return "", "", err
+	}
+	sess, err := c.sessions.Get(ctx, t.SessionRef)
+	if err != nil || sess == nil {
+		return "", "", fmt.Errorf("handoff: session not found")
+	}
+	v, err := s.cookie.Encode(t.SessionRef)
+	if err != nil {
+		return "", "", err
+	}
+	return v, t.ConnectorID, nil
+}
+
+// ValidateRedirectURL validates a post-redemption redirect target against the configured
+// allow-lists, returning the app base URL when the target is empty or disallowed.
+func (s *Service) ValidateRedirectURL(redirectTo string) string {
+	v := ValidateRedirect(redirectTo, s.cfg.AppBaseURL, s.cfg.AllowedRedirectOrigins, s.cfg.AllowedRedirectPaths)
+	if v == "" {
+		return s.cfg.AppBaseURL
+	}
+	return v
 }
 
 // Ensure Service implements auth.Service.

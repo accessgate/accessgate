@@ -27,6 +27,44 @@ Each binary resolves the config file path from environment variables in order:
 
 If none is set, the loader runs with environment variables only.
 
+## Multi-connector (auth) and multi-route (proxy) keys
+
+`connectors` (auth) and `routes` (proxy) are the **only optional** top-level keys
+— every other key is required by the generated schema. When omitted, the runtime
+synthesizes a single `default` connector/route from the legacy singular fields,
+so existing configs keep validating and behaving identically (see ADR-0006 and
+`Config.Normalize()` in each config package). These nested lists are best
+expressed in a config file; arrays-of-objects load from JSON/YAML directly.
+
+### `connectors[]` (accessgate-auth)
+
+| Key | Default | Notes |
+| --- | --- | --- |
+| `id` | — | URL-safe (`[A-Za-z0-9_-]+`); used in `/login/{connector}` paths. Required when `connectors` is set. |
+| `default` | first connector | Exactly one connector must be the default. |
+| `oidc_issuer` / `oidc_client_id` / `oidc_client_secret` / `oidc_redirect_uri` / `oidc_scopes` / `oidc_audience` / `oidc_claims_source` | — | Per-connector OIDC client (same meaning as the top-level `oidc_*` keys). |
+| `provider_plugin_id` | `provider:oidc` | Provider plugin for this connector. |
+| `session_redis_prefix` | `<base>` for default, else `<base>:<id>` | Redis key namespace; set to the old prefix to preserve sessions when migrating. |
+| `cookie_name` | legacy for default, else `<legacy>_<id>` | Per-connector session cookie (keeps the `__Host-` prefix). |
+| `session_ttl_seconds` / `session_pkce_ttl_seconds` / `session_refresh_lock_ttl_seconds` | top-level value | Per-connector TTL overrides. |
+| `claim_mapping.authoritative_id_claim` | `sub` | Claim used as the downstream identity (e.g. a Telegram numeric id claim). |
+| `claim_mapping.id_kind` | `oidc_sub` (or `<id>`) | Low-cardinality label for the id source; emitted as `claims["authoritative_id_kind"]`. |
+| `claim_mapping.email_claim` / `name_claim` / `roles_claim` | standard OIDC | Optional claim overrides. |
+
+### `routes[]` (accessgate-proxy)
+
+| Key | Default | Notes |
+| --- | --- | --- |
+| `id` | — | Route identifier (metrics label). Required when `routes` is set. |
+| `hosts` | any | Optional exact host match list (port-insensitive). |
+| `path_prefix` | — | URL prefix this route serves; longest match wins. Required. |
+| `upstream_url` | — | Per-route upstream (SSRF-validated unless `allow_private_upstreams`). Required. |
+| `require_auth` | false | Enforce a resolved principal. |
+| `unauthenticated_mode` | `api_401` | `api_401` (JSON 401) or `html_redirect` (302 to `login_redirect_url`). |
+| `login_redirect_url` | — | Required when `unauthenticated_mode` is `html_redirect`. |
+| `connector_id` | default | Auth connector this route resolves against (selects the `/internal/resolve?connector=` and cookie name). |
+| `policy_bundle_path` | shared engine | Reserved for per-route policy override (not yet wired). |
+
 > **Deprecated — removal in v2.0:** `AGENT_CONFIG` is a deprecated alias for
 > `AUTH_CONFIG`, retained for backward compatibility with the pre-rename `agent`
 > service. It is honored only by `accessgate-auth` (and `cmd/validateconfig`),

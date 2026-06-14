@@ -2,6 +2,8 @@ package auth
 
 // LoginStartRequest holds input for starting the login flow.
 type LoginStartRequest struct {
+	// Connector selects the identity connector (empty = default connector).
+	Connector string
 	// RedirectTo is the URL or path to redirect to after successful login (validated).
 	RedirectTo string
 	// Prompt forwards supported OIDC prompt values such as "login".
@@ -16,6 +18,8 @@ type LoginStartResponse struct {
 
 // LoginEndRequest holds callback params for login end.
 type LoginEndRequest struct {
+	// Connector selects the identity connector (empty = default connector).
+	Connector string
 	// Code and State from IdP callback query (or error params).
 	Code  string
 	State string

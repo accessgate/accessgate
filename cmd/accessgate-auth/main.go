@@ -44,45 +44,64 @@ func main() {
 	}
 
 	ctx := context.Background()
-	layout := cfg.KeyLayout()
 
 	metrics, metricsHandler := observability.NewPrometheusMetrics(nil)
 	tracer, tracerShutdown := observability.NewOTLPTracerFromEnvWithShutdown()
 
-	store, err := redis.New(ctx, cfg.RedisURL, layout, metrics)
-	if err != nil {
-		logger.Fatalf("redis: %v", err)
-	}
-	defer func() {
-		if err := store.Close(); err != nil {
-			logger.Printf("redis close: %v", err)
-		}
-	}()
-
 	cookieManager := cookie.NewSignedManager(cfg.CookieSigningSecret)
 	jwks := token.NewHTTPJWKSSource(5*time.Minute, metrics)
 
-	provider, err := buildProviderPlugin(cfg)
-	if err != nil {
-		logger.Fatalf("provider plugin: %v", err)
+	// Build one connector per configured connector, each with its own provider instance and
+	// Redis-namespaced stores (same Redis server, distinct key prefix). The default connector's
+	// store seam is reused for readiness checks and admin lookups.
+	connectors := make([]service.Connector, 0, len(cfg.Connectors))
+	var defaultStore *redis.Store
+	for i := range cfg.Connectors {
+		cc := cfg.Connectors[i]
+		store, err := redis.New(ctx, cfg.RedisURL, cc.KeyLayout(), metrics)
+		if err != nil {
+			logger.Fatalf("redis (connector %s): %v", cc.ID, err)
+		}
+		defer func(s *redis.Store, id string) {
+			if err := s.Close(); err != nil {
+				logger.Printf("redis close (connector %s): %v", id, err)
+			}
+		}(store, cc.ID)
+		provider, err := buildProviderPlugin(cc)
+		if err != nil {
+			logger.Fatalf("provider plugin (connector %s): %v", cc.ID, err)
+		}
+		connectors = append(connectors, service.Connector{
+			Config:      cc,
+			Provider:    provider,
+			Sessions:    store.SessionStore(),
+			PKCE:        store.PKCEStore(),
+			RefreshLock: store.RefreshLockStore(),
+			Finder:      store, // *redis.Store implements FindSessionBySubjectEmail (handoff issue)
+		})
+		if bool(cc.Default) || defaultStore == nil {
+			defaultStore = store
+		}
 	}
 
-	svc, err := service.NewWithRuntimeStoreProvider(
+	svc, err := service.NewMultiConnector(
 		cfg,
-		store,
+		connectors,
 		cookieManager,
 		jwks,
-		provider,
 		tracer,
 		metrics,
 	)
 	if err != nil {
 		logger.Fatalf("service: %v", err)
 	}
+	// Enable signed one-time handoff tickets, using the default connector's Redis store for
+	// replay protection (atomic SETNX consume).
+	svc.EnableHandoff(defaultStore, 0)
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.HTTPPort,
-		Handler: httpserver.New(svc, cfg, store, metricsHandler).Handler(),
+		Handler: httpserver.New(svc, cfg, defaultStore, metricsHandler).Handler(),
 	}
 
 	serverErr := make(chan error, 1)
@@ -130,14 +149,17 @@ func loadConfig() (*config.Config, error) {
 	return config.Load(context.Background(), configPath)
 }
 
-func buildProviderPlugin(cfg *config.Config) (plugin.ProviderPlugin, error) {
+// buildProviderPlugin constructs and configures a fresh provider plugin instance for one
+// connector. A new instance per connector is required because oidcprovider.Plugin holds a
+// single configured OIDC client.
+func buildProviderPlugin(cc config.ConnectorConfig) (plugin.ProviderPlugin, error) {
 	ctx := context.Background()
 	reg := plugin.New()
 	if err := (&register.Registrar{}).RegisterBuiltins(ctx, reg); err != nil {
 		return nil, err
 	}
 
-	id := strings.TrimSpace(cfg.ProviderPluginID)
+	id := strings.TrimSpace(cc.ProviderPluginID)
 	if id == "" {
 		id = "provider:oidc"
 	} else if !strings.Contains(id, ":") {
@@ -164,13 +186,13 @@ func buildProviderPlugin(cfg *config.Config) (plugin.ProviderPlugin, error) {
 
 	if cp, ok := p.(plugin.ConfigurablePlugin); ok {
 		providerCfg := map[string]any{
-			"issuer":        cfg.OIDCIssuer,
-			"client_id":     cfg.OIDCClientID,
-			"client_secret": cfg.OIDCClientSecret,
-			"redirect_uri":  cfg.OIDCRedirectURI,
-			"scopes":        cfg.OIDCScopesSlice(),
-			"claims_source": cfg.OIDCClaimsSource,
-			"audience":      cfg.OIDCAudience,
+			"issuer":        cc.OIDCIssuer,
+			"client_id":     cc.OIDCClientID,
+			"client_secret": cc.OIDCClientSecret,
+			"redirect_uri":  cc.OIDCRedirectURI,
+			"scopes":        []string(cc.OIDCScopes),
+			"claims_source": cc.OIDCClaimsSource,
+			"audience":      cc.OIDCAudience,
 		}
 		if err := cp.Configure(ctx, providerCfg); err != nil {
 			return nil, err

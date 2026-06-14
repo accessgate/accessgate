@@ -191,6 +191,89 @@ func TestPolicyReloadIntervalValidation(t *testing.T) {
 	}
 }
 
+func TestNormalize_LegacySynthesizesDefaultRoute(t *testing.T) {
+	cfg := &Config{
+		UpstreamURL:           "http://upstream:3000",
+		AuthURL:               "http://auth:8080",
+		RequireAuth:           true,
+		AllowPrivateUpstreams: true,
+	}
+	cfg.ApplyDefaults()
+	cfg.Normalize()
+
+	if len(cfg.Routes) != 1 {
+		t.Fatalf("expected 1 synthesized route, got %d", len(cfg.Routes))
+	}
+	r := cfg.Routes[0]
+	if r.ID != "default" {
+		t.Errorf("synthesized route id = %q, want default", r.ID)
+	}
+	if r.PathPrefix != "/graphql" {
+		t.Errorf("synthesized route path_prefix = %q, want /graphql (legacy default)", r.PathPrefix)
+	}
+	if r.UpstreamURL != "http://upstream:3000" {
+		t.Errorf("synthesized route upstream = %q", r.UpstreamURL)
+	}
+	if !bool(r.RequireAuth) {
+		t.Error("synthesized route should inherit RequireAuth=true")
+	}
+	if r.UnauthenticatedMode != UnauthModeAPI401 {
+		t.Errorf("synthesized route unauth mode = %q, want api_401", r.UnauthenticatedMode)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate legacy-synthesized: %v", err)
+	}
+}
+
+func TestNormalize_MultiRoute(t *testing.T) {
+	cfg := &Config{
+		AuthURL:               "http://auth:8080",
+		AllowPrivateUpstreams: true,
+		Routes: []RouteConfig{
+			{ID: "web", PathPrefix: "app", UpstreamURL: "http://web:3000", UnauthenticatedMode: UnauthModeHTMLRedirect, LoginRedirectURL: "https://auth/login"},
+			{ID: "api", PathPrefix: "/graphql", UpstreamURL: "http://api:4000"},
+		},
+	}
+	cfg.ApplyDefaults()
+	cfg.Normalize()
+
+	if cfg.Routes[0].PathPrefix != "/app" {
+		t.Errorf("route path_prefix should be normalized with leading slash, got %q", cfg.Routes[0].PathPrefix)
+	}
+	if cfg.Routes[1].UnauthenticatedMode != UnauthModeAPI401 {
+		t.Errorf("route api unauth mode should default to api_401, got %q", cfg.Routes[1].UnauthenticatedMode)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate multi-route: %v", err)
+	}
+}
+
+func TestValidateRoutes_Errors(t *testing.T) {
+	base := func(routes []RouteConfig) *Config {
+		c := &Config{AuthURL: "http://auth", AllowPrivateUpstreams: true, Routes: routes}
+		c.ApplyDefaults()
+		c.Normalize()
+		return c
+	}
+	cases := map[string][]RouteConfig{
+		"missing path":         {{ID: "x", UpstreamURL: "http://u"}},
+		"missing upstream":     {{ID: "x", PathPrefix: "/a"}},
+		"bad unauth mode":      {{ID: "x", PathPrefix: "/a", UpstreamURL: "http://u", UnauthenticatedMode: "bogus"}},
+		"redirect without url": {{ID: "x", PathPrefix: "/a", UpstreamURL: "http://u", UnauthenticatedMode: UnauthModeHTMLRedirect}},
+		"duplicate id": {
+			{ID: "x", PathPrefix: "/a", UpstreamURL: "http://u"},
+			{ID: "x", PathPrefix: "/b", UpstreamURL: "http://u"},
+		},
+	}
+	for name, routes := range cases {
+		t.Run(name, func(t *testing.T) {
+			if err := base(routes).Validate(); err == nil {
+				t.Errorf("expected validation error for %q", name)
+			}
+		})
+	}
+}
+
 func TestPolicyReloadEnabledRequiresBundlePath(t *testing.T) {
 	c := &Config{
 		UpstreamURL:           "http://upstream",

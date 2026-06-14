@@ -24,6 +24,18 @@ type Metrics interface {
 	RefreshCompleted(success bool)
 	// LogoutCompleted records a completed logout flow.
 	LogoutCompleted()
+
+	// Multi-connector / multi-route counters.
+
+	// ConnectorCallback records an OIDC callback (login completion) outcome per connector.
+	ConnectorCallback(connectorID string, success bool)
+	// HandoffIssued records a handoff ticket issuance outcome per connector.
+	HandoffIssued(connectorID string, success bool)
+	// HandoffRedeemed records a handoff ticket redemption outcome per connector.
+	HandoffRedeemed(connectorID string, success bool)
+	// ProxyRouteOutcome records the outcome of a proxy request per route. outcome is one of
+	// "allow", "auth_failure", "upstream_failure", or "route_miss".
+	ProxyRouteOutcome(route, outcome string)
 }
 
 // NopMetrics discards all metrics. It is intended public surface: a no-op Metrics
@@ -56,3 +68,15 @@ func (NopMetrics) RefreshCompleted(success bool) {}
 
 // LogoutCompleted implements Metrics.
 func (NopMetrics) LogoutCompleted() {}
+
+// ConnectorCallback implements Metrics.
+func (NopMetrics) ConnectorCallback(connectorID string, success bool) {}
+
+// HandoffIssued implements Metrics.
+func (NopMetrics) HandoffIssued(connectorID string, success bool) {}
+
+// HandoffRedeemed implements Metrics.
+func (NopMetrics) HandoffRedeemed(connectorID string, success bool) {}
+
+// ProxyRouteOutcome implements Metrics.
+func (NopMetrics) ProxyRouteOutcome(route, outcome string) {}

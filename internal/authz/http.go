@@ -35,6 +35,22 @@ func init() {
 	}
 }
 
+// reservedIdentityHeaders are the identity/authorization headers the proxy derives
+// from the verified principal (see defaultHeaderBuilder in engine.go). They must never
+// be forwarded from the inbound client request: a client could otherwise spoof its
+// identity to the upstream whenever the proxy does not itself overwrite the header
+// (e.g. an empty Subject, or a custom HeaderBuilder that omits one). Keys are lowercase.
+var reservedIdentityHeaders = map[string]bool{
+	"authorization":             true,
+	"x-user-id":                 true,
+	"x-roles":                   true,
+	"x-user-email":              true,
+	"x-user-full-name":          true,
+	"x-user-preferred-username": true,
+	"x-is-admin":                true,
+	"x-tenant-id":               true,
+}
+
 // validateUpstreamURL rejects schemes other than http/https and blocks SSRF-prone hosts.
 func validateUpstreamURL(u *url.URL) error {
 	if u.Scheme != "http" && u.Scheme != "https" {
@@ -149,6 +165,11 @@ func ProxyToUpstream(ctx context.Context, w http.ResponseWriter, r *http.Request
 	}
 	for k, v := range r.Header {
 		if strings.EqualFold(k, "Cookie") {
+			continue
+		}
+		// Trust boundary: drop client-supplied identity headers so only the
+		// proxy's verified, principal-derived values (set below) reach the upstream.
+		if reservedIdentityHeaders[strings.ToLower(k)] {
 			continue
 		}
 		outReq.Header[k] = v
