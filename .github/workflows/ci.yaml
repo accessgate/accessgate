@@ -155,7 +155,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build accessgate-auth image (amd64, no push)
         uses: docker/build-push-action@v7
@@ -282,7 +282,7 @@ jobs:
         uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       # Fail fast if the Docker Hub credentials are missing. GoReleaser publishes
       # the GitHub Release and pushes GHCR images BEFORE the docker.io pushes, so
